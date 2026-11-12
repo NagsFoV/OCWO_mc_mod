@@ -23,7 +23,11 @@ jobs:
           ./gradlew :common:build :fabric:build :fabric:compileGametestJava --no-daemon --console=plain
       - name: Check mixin targets against Minecraft 26.3
         run: |
-          JAR=common/build/moddev/artifacts/vanilla-26.3-1-merged.jar
+          ls -la common/build/moddev/artifacts || true
+          # the merged (client + server) jar when present, else the first non-sources jar
+          JAR=$(ls common/build/moddev/artifacts/*merged*.jar 2>/dev/null | head -1)
+          [ -n "$JAR" ] || JAR=$(ls common/build/moddev/artifacts/*.jar | grep -v -- '-sources' | head -1)
+          echo "Minecraft jar: $JAR"
           python3 ../../tools/ci/checkmixins.py common/src/main/java "$JAR" "$JAVA_HOME/bin/javap"
           python3 ../../tools/ci/checkinject.py common/src/main/java "$JAR" "$JAVA_HOME/bin/javap"
       - uses: actions/upload-artifact@v4

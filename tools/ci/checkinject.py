@@ -5,6 +5,20 @@ Usage: python checkinject.py <src root> <jar> <javap>
 import os, re, subprocess, sys
 
 src, jar, javap = sys.argv[1], sys.argv[2], sys.argv[3]
+
+def check_jar(jar, javap):
+    """Stops at once with a clear message when the Minecraft jar cannot be read."""
+    if not os.path.isfile(jar):
+        print(f'Minecraft jar unreadable: {jar} does not exist')
+        sys.exit(2)
+    out = subprocess.run([javap, '-cp', jar, 'net.minecraft.world.level.Level'], capture_output=True, text=True)
+    if out.returncode != 0:
+        print(f'Minecraft jar unreadable: javap cannot read net.minecraft.world.level.Level from {jar}')
+        print(out.stderr.strip()[:500])
+        sys.exit(2)
+
+
+check_jar(jar, javap)
 dis_cache = {}
 
 

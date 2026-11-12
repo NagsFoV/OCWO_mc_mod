@@ -96,3 +96,12 @@ loom {
         }
     }
 }
+
+// Game tests start a Minecraft server: they only run when asked for by name (:fabric:runGameTest...),
+// never as part of build/check (nor in CI, where the Minecraft EULA has not been accepted).
+gradle.taskGraph.whenReady { graph ->
+    def asked = gradle.startParameter.taskNames.any { it.toLowerCase().contains('gametest') }
+    if (!asked) {
+        graph.allTasks.findAll { it.name == 'runGameTest' }.each { it.enabled = false }
+    }
+}
