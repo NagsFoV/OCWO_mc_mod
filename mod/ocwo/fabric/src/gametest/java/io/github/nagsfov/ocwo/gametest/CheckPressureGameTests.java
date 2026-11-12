@@ -13,7 +13,7 @@ import net.minecraft.world.level.material.Fluids;
  * OCWO pressure scenarios (see 06-pression.md). Every scenario is built by code, checks its expected final
  * state, and checks at every tick that the total amount of water in the area never changes (conservation).
  */
-public class PressureGameTests {
+public class CheckPressureGameTests {
 
 	private static final int MAX = FluidUtils.MAX_LEVEL;
 
@@ -43,12 +43,17 @@ public class PressureGameTests {
 
 	/** Fails the test as soon as the amount of water in the box changes. */
 	private static void checkConservation(GameTestHelper h, int x0, int y0, int z0, int x1, int y1, int z1) {
-		int initial = total(h, x0, y0, z0, x1, y1, z1);
-		System.out.println("[OCWO-TEST] water at start: " + initial + " levels");
+		// liquid water + moisture of the blocks (walls absorb water too), in moisture units
+		long initial = WaterCount.units(h, x0, y0, z0, x1, y1, z1);
+		System.out.println("[OCWO-TEST] water at start: " + initial + " units");
+		final java.util.Map<String, String>[] last = new java.util.Map[]{WaterCount.snapshot(h, x0, y0, z0, x1, y1, z1)};
 		h.onEachTick(() -> {
-			int now = total(h, x0, y0, z0, x1, y1, z1);
+			long now = WaterCount.units(h, x0, y0, z0, x1, y1, z1);
+			java.util.Map<String, String> snap = WaterCount.snapshot(h, x0, y0, z0, x1, y1, z1);
+			if (now != initial) WaterCount.printDiff(last[0], snap);
+			last[0] = snap;
 			if (now != initial) {
-				h.fail("Water not conserved: " + initial + " levels at start, " + now + " now");
+				h.fail("Water not conserved: " + initial + " units at start, " + now + " now");
 			}
 		});
 	}
@@ -71,7 +76,7 @@ public class PressureGameTests {
 	 */
 	@GameTest(maxTicks = 1200, padding = 24)
 	public void uTubeNarrowJunction(GameTestHelper h) {
-		fill(h, 0, 0, 0, 6, 14, 2, Blocks.STONE);
+		fill(h, 0, 0, 0, 6, 14, 2, Blocks.OBSIDIAN);
 		fill(h, 1, 1, 1, 1, 14, 1, Blocks.AIR);
 		fill(h, 5, 1, 1, 5, 14, 1, Blocks.AIR);
 		fill(h, 2, 1, 1, 4, 2, 1, Blocks.AIR);
@@ -96,11 +101,11 @@ public class PressureGameTests {
 	 * corridor must end full.
 	 */
 	private static void corridor(GameTestHelper h, int openingY, boolean step) {
-		fill(h, 0, 0, 0, 19, 10, 8, Blocks.STONE);
+		fill(h, 0, 0, 0, 19, 10, 8, Blocks.OBSIDIAN);
 		fill(h, 1, 1, 1, 7, 10, 7, Blocks.AIR);
 		fill(h, 9, 1, 4, 18, 3, 4, Blocks.AIR);
 		h.setBlock(8, openingY, 4, Blocks.AIR);
-		if (step) h.setBlock(9, 1, 4, Blocks.STONE);
+		if (step) h.setBlock(9, 1, 4, Blocks.OBSIDIAN);
 		fill(h, 1, 1, 1, 7, 8, 7, Blocks.WATER);
 		checkConservation(h, 0, 0, 0, 19, 11, 8);
 		h.succeedWhen(() -> {
@@ -136,7 +141,7 @@ public class PressureGameTests {
 	 */
 	@GameTest(maxTicks = 400, padding = 24)
 	public void glassAtLakeBottom(GameTestHelper h) {
-		fill(h, 0, 0, 0, 8, 10, 8, Blocks.STONE);
+		fill(h, 0, 0, 0, 8, 10, 8, Blocks.OBSIDIAN);
 		fill(h, 1, 1, 1, 7, 10, 7, Blocks.AIR);
 		fill(h, 1, 1, 1, 7, 8, 7, Blocks.WATER);
 		checkConservation(h, 0, 0, 0, 8, 11, 8);

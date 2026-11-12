@@ -71,7 +71,7 @@ public final class DrainScenario {
 	static void build(GameTestHelper h, Pool p) {
 		ServerLevel level = h.getLevel();
 		int quiet = Block.UPDATE_CLIENTS; // no neighbour updates while building
-		BlockState stone = Blocks.STONE.defaultBlockState();
+		BlockState stone = Blocks.OBSIDIAN.defaultBlockState();
 		BlockState air = Blocks.AIR.defaultBlockState();
 		BlockState water = Blocks.WATER.defaultBlockState();
 		int n = p.size();
@@ -101,6 +101,11 @@ public final class DrainScenario {
 	private static int level(GameTestHelper h, int x, int y, int z) {
 		FluidState fs = h.getLevel().getFluidState(h.absolutePos(new BlockPos(x, y, z)));
 		return fs.getType().isSame(Fluids.WATER) ? fs.getAmount() : 0;
+	}
+
+	/** Liquid water + moisture of the whole build (walls and floors included), in moisture units. */
+	static long waterUnits(GameTestHelper h, Pool p) {
+		return WaterCount.units(h, 0, 0, 0, p.size() + 1, p.lakeMaxY() + 1, p.size() + 1);
 	}
 
 	static long total(GameTestHelper h, Pool p, int y0, int y1) {
@@ -185,9 +190,9 @@ public final class DrainScenario {
 			forceChunks(h, p.size(), true);
 			build(h, p);
 			h.runAfterDelay(5, () -> {
-				initial = total(h, p, 1, p.lakeMaxY() + 1);
+				initial = waterUnits(h, p);
 				System.out.println("[OCWO-TEST] " + name + ": " + p.size() + "x" + p.size() + "x" + p.lakeHeight()
-						+ " lake, " + initial + " levels of water");
+						+ " lake, " + initial + " units of water (liquid + moisture)");
 				if (profile) OcwoProfiler.start(h.getLevel());
 				startTick = h.getTick();
 				openHoles(h, p);
@@ -207,10 +212,10 @@ public final class DrainScenario {
 				if (last > serverMax) serverMax = last;
 			}
 			if (drainedTick < 0 && t % 20 == 0 && t > 0) {
-				long now = total(h, p, 1, p.lakeMaxY() + 1);
+				long now = waterUnits(h, p);
 				if (now != initial) {
 					finish();
-					h.fail("Water not conserved: " + initial + " levels at start, " + now + " at tick " + t);
+					h.fail("Water not conserved: " + initial + " units at start, " + now + " at tick " + t);
 					return;
 				}
 				long lake = total(h, p, p.lakeMinY(), p.lakeMaxY());

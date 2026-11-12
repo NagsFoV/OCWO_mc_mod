@@ -64,7 +64,7 @@ fabricApi {
 // Performance scenarios, separately: ./gradlew :fabric:runGameTestPerf
 afterEvaluate {
     loom.runs.named('gameTest') {
-        vmArg '-Dfabric-api.gametest.filter=ocwo-gametest:pressure_*'
+        vmArg '-Dfabric-api.gametest.filter=ocwo-gametest:check_*'
     }
 }
 loom {
