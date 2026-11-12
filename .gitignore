@@ -20,3 +20,6 @@ Thumbs.db
 
 # Exports from the classification page (the page's shared store is the source of truth)
 tools/ocwo-classement-blocs*.json
+
+# Regenerable: gradlew :fabric:runBlockDump
+tools/blocks-26.3-raw.json
