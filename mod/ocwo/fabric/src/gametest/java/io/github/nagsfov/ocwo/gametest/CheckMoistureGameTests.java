@@ -152,4 +152,70 @@ public class CheckMoistureGameTests {
 			report(h, "basaltIsDirectional", "vertical: " + vertical + " levels below, horizontal: dry");
 		});
 	}
+
+	/** Sand under the sea soaks up water, but never from the cells of seagrass and kelp (that would destroy them). */
+	@GameTest(maxTicks = 1400, padding = 24)
+	public void seagrassOnSandSurvives(GameTestHelper h) {
+		box(h, 6, 6, 6);
+		fill(h, 1, 1, 1, 5, 1, 5, Blocks.SAND);
+		fill(h, 1, 2, 1, 5, 4, 5, Blocks.WATER);
+		for (int x = 1; x <= 5; x += 2)
+			for (int z = 1; z <= 5; z += 2)
+				h.setBlock(new BlockPos(x, 2, z), Blocks.SEAGRASS);
+		h.setBlock(new BlockPos(2, 2, 2), Blocks.KELP);
+		conservation(h, 6, 6, 6);
+		h.runAfterDelay(1200, () -> {
+			int alive = 0;
+			for (int x = 1; x <= 5; x += 2)
+				for (int z = 1; z <= 5; z += 2)
+					if (h.getBlockState(new BlockPos(x, 2, z)).is(Blocks.SEAGRASS)) alive++;
+			boolean kelp = h.getBlockState(new BlockPos(2, 2, 2)).is(Blocks.KELP);
+			long sand = 0;
+			for (int x = 1; x <= 5; x++)
+				for (int z = 1; z <= 5; z++) sand += WaterCount.moisture(h, new BlockPos(x, 1, z));
+			h.assertTrue(alive == 9 && kelp, "Aquatic plants destroyed: " + alive + "/9 seagrass, kelp " + kelp);
+			h.assertTrue(sand > 0, "The sand soaked up nothing");
+			report(h, "seagrassOnSandSurvives", "9/9 seagrass and kelp alive, sand moisture " + sand + " units");
+			h.succeed();
+		});
+	}
+
+	/**
+	 * Mud made by the simulation, mined then placed back: liquid water + moisture + the water carried by the item
+	 * (min(moisture, fixed water) when mined) stays constant, and the placed mud does not turn back into dirt.
+	 */
+	@GameTest(maxTicks = 1000, padding = 24)
+	public void mudMinedAndPlacedKeepsWater(GameTestHelper h) {
+		box(h, 4, 4, 4);
+		BlockPos p = new BlockPos(2, 1, 2);
+		h.setBlock(p, Blocks.DIRT);
+		var sim = io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(h.getLevel()).moisture();
+		// 4 levels of moisture in the dirt: "mouille" (4/6) -> becomes mud at its next step
+		sim.setUnits(h.absolutePos(p), 64);
+		sim.activate(h.absolutePos(p));
+		long[] before = {-1};
+		long[] carried = {0};
+		h.succeedWhen(() -> {
+			if (before[0] < 0) {
+				h.assertTrue(h.getBlockState(p).is(Blocks.MUD), "Dirt did not become mud yet");
+				before[0] = WaterCount.units(h, 0, 0, 0, 4, 4, 4);
+				int moisture = WaterCount.moisture(h, p);
+				// mine it: the item carries min(moisture, fixed water = 2 levels)
+				carried[0] = Math.min(moisture, 2 * io.github.nagsfov.ocwo.moisture.Moisture.UNITS_PER_LEVEL);
+				h.getLevel().setBlock(h.absolutePos(p), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+				long afterMining = WaterCount.units(h, 0, 0, 0, 4, 4, 4);
+				h.assertTrue(afterMining == before[0] - carried[0], "Mining: " + before[0] + " - " + carried[0] + " expected, got " + afterMining);
+				// place it back
+				h.getLevel().setBlock(h.absolutePos(p), Blocks.MUD.defaultBlockState(), Block.UPDATE_ALL);
+				h.fail("waiting");
+				return;
+			}
+			long now = WaterCount.units(h, 0, 0, 0, 4, 4, 4);
+			h.assertTrue(now == before[0] - carried[0] + 2L * io.github.nagsfov.ocwo.moisture.Moisture.UNITS_PER_LEVEL,
+					"Total after placing back: " + now + " (before mining " + before[0] + ", carried " + carried[0] + ")");
+			h.assertTrue(h.getTick() > 200, "waiting for the placed mud to be simulated");
+			h.assertTrue(h.getBlockState(p).is(Blocks.MUD), "The placed mud turned back into dirt");
+			report(h, "mudMinedAndPlacedKeepsWater", "carried " + carried[0] + " units, total " + now);
+		});
+	}
 }

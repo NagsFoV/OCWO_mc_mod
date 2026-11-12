@@ -35,7 +35,7 @@ DEFAULTS = {
     'organique': dict(capacity=4, permeability=2, stages=False, retains=False),
     'laine': dict(capacity=8, permeability=5, stages=True, retains=True),
     'eponge': dict(capacity=8, permeability=5, stages=False, retains=True,
-                   transform=dict(target='minecraft:wet_sponge', stageIn='sature', stageOut='sec')),
+                   transform=dict(target='minecraft:wet_sponge', stageIn='sature', stageOut='humide')),
     'verre': dict(capacity=0, permeability=0, stages=False, retains=False),
     'metal': dict(capacity=0, permeability=0, stages=False, retains=False),
     'autre': dict(capacity=0, permeability=0, stages=False, retains=False),

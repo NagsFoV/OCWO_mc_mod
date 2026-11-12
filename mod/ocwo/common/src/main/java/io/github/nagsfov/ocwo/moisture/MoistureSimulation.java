@@ -97,19 +97,39 @@ public final class MoistureSimulation {
 
 	/**
 	 * Called after a block of the level changed (outside the simulation's own state changes).
-	 * A block made of water (mud, ice…) keeps its fixed water in the item: that amount leaves the cell.
+	 * Symmetric accounting of the fixed water of blocks made of water that hold moisture (mud, wet sponge):
+	 * <ul>
+	 *   <li>removed (mined, replaced): the item carries min(moisture, fixed water); the rest stays in the cell
+	 *   and is released as water like for any block;</li>
+	 *   <li>placed (by a player, a command, a piston…): the fixed water of the item is added to the cell.</li>
+	 * </ul>
+	 * Blocks made of water that hold no moisture (ice, snow) are left alone for now.
 	 */
 	public void onBlockChanged(BlockPos pos, BlockState oldState, BlockState newState) {
 		if (internalChange || oldState.getBlock() == newState.getBlock()) return;
 		MoistureProps oldProps = MoistureData.get(oldState);
 		MoistureProps newProps = MoistureData.get(newState);
 		if (oldProps == null && newProps == null) return;
-		if (oldProps != null && oldProps.fixedWater() > 0) {
+		if (oldProps != null && oldProps.holdsMoisture() && oldProps.fixedWater() > 0) {
 			int h = units(pos);
-			if (h > 0) setUnits(pos, Math.max(0, h - oldProps.fixedWater()));
+			int carried = Math.min(h, oldProps.fixedWater());
+			if (carried > 0) setUnits(pos, h - carried);
+		}
+		if (newProps != null && newProps.holdsMoisture() && newProps.fixedWater() > 0) {
+			setUnits(pos, units(pos) + newProps.fixedWater());
 		}
 		active.add(pos.asLong());
 		activateAround(pos);
+	}
+
+	/**
+	 * A block that loses water when water is taken from its cell would be destroyed (kelp, seagrass: always full,
+	 * no fluid layer) or broken (bubble columns): the moisture system never takes water from those cells.
+	 */
+	private static boolean canTakeWaterFrom(BlockState state) {
+		if (state.is(net.minecraft.world.level.block.Blocks.BUBBLE_COLUMN)) return false;
+		return !(state.getBlock() instanceof net.minecraft.world.level.block.LiquidBlockContainer)
+				|| state.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED);
 	}
 
 	// ------------------------------------------------------------------ tick
@@ -200,6 +220,12 @@ public final class MoistureSimulation {
 		}
 		RandomSource random = level.getRandom();
 		int cap = props.capacity();
+		if (props.fixedWater() > 0 && h < props.fixedWater()) {
+			// A block made of water with less moisture than its fixed water can only come from world generation
+			// (mangrove mud): its generation water is initialised once (the only creation of water allowed).
+			h = props.fixedWater();
+			setUnits(pos, h);
+		}
 		int start = h;
 		boolean supply = false;
 		boolean waterAround = false;
@@ -214,6 +240,7 @@ public final class MoistureSimulation {
 			if (d != Direction.DOWN) supply = true;
 			int perm = props.permeability(state, d);
 			if (perm <= 0 || h + U > cap || random.nextInt(10) >= perm) continue;
+			if (!canTakeWaterFrom(level.getBlockState(n))) continue;
 			if (fs.getType() instanceof FlowingFluid ff && fs.getAmount() > 0) {
 				FluidUtils.setFluid(level, n, ff, fs.getAmount() - 1, false);
 				h += U;

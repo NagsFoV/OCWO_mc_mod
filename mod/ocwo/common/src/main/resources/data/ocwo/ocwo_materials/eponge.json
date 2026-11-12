@@ -6,7 +6,7 @@
  "transform": {
   "target": "minecraft:wet_sponge",
   "stageIn": "sature",
-  "stageOut": "sec",
+  "stageOut": "humide",
   "from": [
    "minecraft:sponge"
   ]

@@ -32,6 +32,11 @@ EXTRA_OVERRIDES = {
     'stripped_bamboo_block': {'along': 3, 'across': 0},
 }
 
+# Fixed water (levels) of blocks made of water that hold moisture: at most the moisture under which the block
+# cannot exist (mud turns back into dirt under "humide" = 25 % of 8 levels = 2 levels; wet sponge into sponge
+# under "humide" too), so that mining then placing one never creates water. Others (ice, snow): 8, unused for now.
+FIXED_WATER_LEVELS = {'mud': 2, 'wet_sponge': 2}
+
 # Blocks a material's state change applies to (03: only dirt-like soils become mud; grass, podzol, farmland… don't).
 # Missing material = all its blocks, except the target itself.
 TRANSFORM_FROM = {
@@ -71,7 +76,7 @@ def main():
         assignment[mat].append(bid)
         s = dict(EXTRA_OVERRIDES.get(name, {}))
         s.update(edit.get('override') or {})
-        fixed = edit.get('fixedWater', 8 if 'F' in flags else None)
+        fixed = edit.get('fixedWater', FIXED_WATER_LEVELS.get(name, 8) if 'F' in flags else None)
         if fixed:
             s['fixed_water'] = fixed
         if s:

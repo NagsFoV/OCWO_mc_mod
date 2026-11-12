@@ -73,6 +73,10 @@ Les plantes aquatiques (algue, herbier) et les blocs posés « gorgés d'eau » 
 
 **À corriger plus tard** (pas encore codé) : exiger une case d'eau pleine dans ces deux cas, comme le fait déjà le correctif de l'algue.
 
-## 7. Couche fluide instable
+## 7. À traiter avec les nuages : restes d'humidité de moins d'un niveau
+
+Quand un bloc qui ne peut plus retenir d'humidité (cassé, remplacé) la rend en eau, seuls des niveaux entiers (16 unités) deviennent de l'eau. Le reste, moins d'un niveau, reste stocké dans la case, même devenue de l'air, et y reste pour toujours. Rien n'est perdu, mais cette eau est immobilisée. Quand les nuages existeront, ce reste devra partir au nuage de la zone (règle des restes de `01-vision-et-decisions.md`).
+
+## 8. Couche fluide instable
 
 L'auteur de PhysEx indique lui-même que la couche fluide supplémentaire « peut causer des problèmes de stabilité ». À tester en priorité, puisque notre stockage d'humidité s'en inspire.
