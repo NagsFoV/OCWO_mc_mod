@@ -4,6 +4,8 @@ import io.github.nagsfov.ocwo.fluids.OcwoFluidGameRules;
 import io.github.nagsfov.ocwo.fluids.OcwoFluidItems;
 import io.github.nagsfov.ocwo.fluids.VanillaFluidTweaks;
 import io.github.nagsfov.ocwo.fluids.layer.FluidLayer;
+import io.github.nagsfov.ocwo.moisture.MoistureCommand;
+import io.github.nagsfov.ocwo.moisture.MoistureData;
 import io.github.nagsfov.ocwo.platform.Services;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +36,10 @@ public final class Ocwo {
 			if (OcwoBootConfig.INSTANCE.isExtraFluidLayerEnabled()) {
 				FluidLayer.init();
 			}
+			// Block moisture (03-humidite-et-etats-des-blocs.md)
+			Services.PLATFORM.registerMoistureLayer();
+			Services.PLATFORM.registerServerReloadListener(MoistureData.RELOAD_ID, MoistureData.LISTENER);
+			Services.PLATFORM.registerCommands(MoistureCommand::register);
 		}
 		if (fluidItemsEnabled()) {
 			OcwoFluidItems.init();

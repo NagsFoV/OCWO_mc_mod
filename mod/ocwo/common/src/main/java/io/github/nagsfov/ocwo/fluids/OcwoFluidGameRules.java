@@ -29,6 +29,14 @@ public class OcwoFluidGameRules {
 	public static final GameRule<Integer> PRESSURE_SEARCH_LIMIT = enabled()
 			? Services.PLATFORM.registerIntRule("pressure_search_limit", 256, 0, 65_536) : null;
 
+	/** Block moisture simulation (03-humidite-et-etats-des-blocs.md). */
+	public static final GameRule<Boolean> MOISTURE_SIMULATION = enabled()
+			? Services.PLATFORM.registerBooleanRule("moisture_simulation", true) : null;
+
+	/** TEST ONLY, NOT CONSERVATIVE: vanilla rain adds moisture to the top blocks (no clouds yet). */
+	public static final GameRule<Boolean> RAIN_MOISTURE_TEST = enabled()
+			? Services.PLATFORM.registerBooleanRule("rain_moisture_test", false) : null;
+
 	private static boolean enabled() {
 		return OcwoBootConfig.INSTANCE.isFluidPhysicsEnabled();
 	}

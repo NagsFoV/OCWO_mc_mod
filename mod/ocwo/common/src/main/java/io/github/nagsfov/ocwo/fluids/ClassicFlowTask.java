@@ -33,6 +33,8 @@ public final class ClassicFlowTask extends AbstractFluidTask {
 	@Override
 	public void run() {
 		fluidTicks.countTask();
+		// OCWO: porous blocks around moving water start soaking it up
+		fluidTicks.moisture().activateAround(pos);
 		flowRun();
 	}
 

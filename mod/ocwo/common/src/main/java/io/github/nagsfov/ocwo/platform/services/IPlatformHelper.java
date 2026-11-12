@@ -1,6 +1,11 @@
 package io.github.nagsfov.ocwo.platform.services;
 
+import com.mojang.brigadier.CommandDispatcher;
 import io.github.nagsfov.ocwo.fluids.layer.FluidLayer;
+import io.github.nagsfov.ocwo.moisture.MoistureLayer;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.resources.PreparableReloadListener;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.world.item.component.TooltipProvider;
 import net.minecraft.network.chat.Component;
@@ -47,6 +52,23 @@ public interface IPlatformHelper {
 	/** Sets (or removes with null) the layer and returns the previous one. */
 	@Nullable
 	FluidLayer setFluidLayer(ChunkAccess chunk, @Nullable FluidLayer layer);
+
+	// ---- Moisture layer stored on chunks (saved with the chunk) ----
+
+	void registerMoistureLayer();
+
+	@Nullable
+	MoistureLayer getMoistureLayer(ChunkAccess chunk);
+
+	MoistureLayer getOrCreateMoistureLayer(ChunkAccess chunk);
+
+	// ---- Data and commands ----
+
+	/** Registers a server data reload listener (runs on start and on /reload). */
+	void registerServerReloadListener(Identifier id, PreparableReloadListener listener);
+
+	/** Registers server commands. */
+	void registerCommands(java.util.function.Consumer<CommandDispatcher<CommandSourceStack>> registrar);
 
 	// ---- Blocks and fluids ----
 

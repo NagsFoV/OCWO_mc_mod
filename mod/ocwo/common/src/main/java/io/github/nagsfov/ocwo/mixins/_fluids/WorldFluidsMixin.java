@@ -51,6 +51,9 @@ public abstract class WorldFluidsMixin {
 			}
 		}
 		BlockState oldState = chunk.setBlockState(blockPos, blockState, flags);
+		if (!isClientSide() && oldState != null) {
+			io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get((Level) (Object) this).moisture().onBlockChanged(blockPos, oldState, blockState);
+		}
 		//noinspection ConstantValue
 		if (check) {
 			ServerLevel sl = (ServerLevel) (Object) this;

@@ -39,6 +39,8 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 
 	private int tickNumber;
 
+	private final io.github.nagsfov.ocwo.moisture.MoistureSimulation moisture;
+
 	// ---- OCWO pressure (see PressureSearch and 06-pression.md) ----
 	private static final int PRESSURE_SAMPLE_PERIOD = 20;
 	private static final int PRESSURE_SAMPLES_PER_PLAYER = 16;
@@ -64,10 +66,15 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 	public CustomFluidTicks(LongPredicate chunkPredicate, ServerLevel world) {
 		super(chunkPredicate);
 		this.world = world;
+		this.moisture = new io.github.nagsfov.ocwo.moisture.MoistureSimulation(world);
 	}
 
 	public static CustomFluidTicks get(LevelAccessor world) {
 		return (CustomFluidTicks) world.getFluidTicks();
+	}
+
+	public io.github.nagsfov.ocwo.moisture.MoistureSimulation moisture() {
+		return moisture;
 	}
 
 	public int getTaskLimit() {
@@ -229,6 +236,8 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		samplePressure();
 		tickPressure();
 		if (pressureStart != 0L) OcwoProfiler.addPressureNanos(world, System.nanoTime() - pressureStart);
+		profiler.popPush("block moisture");
+		moisture.tick();
 		profiler.popPush("fluid equalization");
 		EqualizationFluidTask task;
 		EqualizationFluidTask bt = equalizationQueue.peekLast();

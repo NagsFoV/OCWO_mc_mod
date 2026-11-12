@@ -20,6 +20,7 @@ public final class OcwoProfiler {
 	private static long pressureSteps;
 	private static long pressureMoves;
 	private static long pressureNanos;
+	private static long moistureNanos;
 
 	private OcwoProfiler() {
 	}
@@ -32,6 +33,7 @@ public final class OcwoProfiler {
 		pressureSteps = 0;
 		pressureMoves = 0;
 		pressureNanos = 0;
+		moistureNanos = 0;
 		target = level;
 	}
 
@@ -67,6 +69,15 @@ public final class OcwoProfiler {
 	/** Time spent in the pressure steps (part of the fluid tick). */
 	public static void addPressureNanos(ServerLevel level, long nanos) {
 		if (isProfiling(level)) pressureNanos += nanos;
+	}
+
+	/** Time spent in the moisture simulation (part of the fluid tick). */
+	public static void addMoistureNanos(ServerLevel level, long nanos) {
+		if (isProfiling(level)) moistureNanos += nanos;
+	}
+
+	public static double moistureAverageMillis() {
+		return ticks == 0 ? 0 : moistureNanos / 1e6 / ticks;
 	}
 
 	public static double pressureAverageMillis() {

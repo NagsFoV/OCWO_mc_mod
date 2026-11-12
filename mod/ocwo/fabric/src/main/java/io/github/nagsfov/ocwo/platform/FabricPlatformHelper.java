@@ -3,6 +3,13 @@ package io.github.nagsfov.ocwo.platform;
 import io.github.nagsfov.ocwo.Ocwo;
 import io.github.nagsfov.ocwo.fluids.layer.FluidLayer;
 import io.github.nagsfov.ocwo.fluids.layer.FluidLayerConstants;
+import io.github.nagsfov.ocwo.moisture.MoistureLayer;
+import com.mojang.brigadier.CommandDispatcher;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.resources.PreparableReloadListener;
 import io.github.nagsfov.ocwo.platform.services.IPlatformHelper;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentSyncPredicate;
@@ -27,6 +34,7 @@ import net.minecraft.world.level.material.Fluid;
 public class FabricPlatformHelper implements IPlatformHelper {
 
 	private static AttachmentType<FluidLayer> fluidLayerType;
+	private static AttachmentType<MoistureLayer> moistureLayerType;
 
 	@Override
 	public String getPlatformName() {
@@ -92,6 +100,36 @@ public class FabricPlatformHelper implements IPlatformHelper {
 	@Override
 	public FluidLayer setFluidLayer(ChunkAccess chunk, FluidLayer layer) {
 		return chunk.setAttached(fluidLayerType, layer);
+	}
+
+	// ---- Moisture layer (Fabric data attachment on chunks, saved, not synced) ----
+
+	@Override
+	public void registerMoistureLayer() {
+		moistureLayerType = AttachmentRegistry.create(MoistureLayer.ID,
+				builder -> builder.initializer(MoistureLayer::new).persistent(MoistureLayer.CODEC));
+	}
+
+	@Override
+	public MoistureLayer getMoistureLayer(ChunkAccess chunk) {
+		return moistureLayerType == null ? null : chunk.getAttached(moistureLayerType);
+	}
+
+	@Override
+	public MoistureLayer getOrCreateMoistureLayer(ChunkAccess chunk) {
+		return chunk.getAttachedOrCreate(moistureLayerType);
+	}
+
+	// ---- Data and commands ----
+
+	@Override
+	public void registerServerReloadListener(Identifier id, PreparableReloadListener listener) {
+		ResourceLoader.get(PackType.SERVER_DATA).registerReloadListener(id, listener);
+	}
+
+	@Override
+	public void registerCommands(java.util.function.Consumer<CommandDispatcher<CommandSourceStack>> registrar) {
+		CommandRegistrationCallback.EVENT.register((dispatcher, context, selection) -> registrar.accept(dispatcher));
 	}
 
 	// ---- Blocks and fluids ----

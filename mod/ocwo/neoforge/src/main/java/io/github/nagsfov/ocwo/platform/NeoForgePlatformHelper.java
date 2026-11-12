@@ -1,6 +1,11 @@
 package io.github.nagsfov.ocwo.platform;
 
 import io.github.nagsfov.ocwo.fluids.layer.FluidLayer;
+import io.github.nagsfov.ocwo.moisture.MoistureLayer;
+import com.mojang.brigadier.CommandDispatcher;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.resources.PreparableReloadListener;
 import io.github.nagsfov.ocwo.platform.services.IPlatformHelper;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.world.item.component.TooltipProvider;
@@ -67,6 +72,31 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
 
 	@Override
 	public FluidLayer setFluidLayer(ChunkAccess chunk, FluidLayer layer) {
+		throw todo();
+	}
+
+	@Override
+	public void registerMoistureLayer() {
+		throw todo();
+	}
+
+	@Override
+	public MoistureLayer getMoistureLayer(ChunkAccess chunk) {
+		throw todo();
+	}
+
+	@Override
+	public MoistureLayer getOrCreateMoistureLayer(ChunkAccess chunk) {
+		throw todo();
+	}
+
+	@Override
+	public void registerServerReloadListener(Identifier id, PreparableReloadListener listener) {
+		throw todo();
+	}
+
+	@Override
+	public void registerCommands(java.util.function.Consumer<CommandDispatcher<CommandSourceStack>> registrar) {
 		throw todo();
 	}
 
