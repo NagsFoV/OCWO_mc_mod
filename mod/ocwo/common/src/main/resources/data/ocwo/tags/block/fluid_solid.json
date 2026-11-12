@@ -1,0 +1,10 @@
+{
+	"values": [
+		"#minecraft:portals",
+		"#minecraft:cauldrons",
+		"minecraft:dragon_egg",
+		"minecraft:farmland",
+		"minecraft:dirt_path",
+		"minecraft:end_portal_frame"
+	]
+}

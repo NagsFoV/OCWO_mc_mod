@@ -1,0 +1,98 @@
+plugins {
+    id 'multiloader-loader'
+    id 'net.fabricmc.fabric-loom'
+}
+dependencies {
+    minecraft("com.mojang:minecraft:${minecraft_version}")
+    implementation("net.fabricmc:fabric-loader:${fabric_loader_version}")
+    implementation("net.fabricmc.fabric-api:fabric-api:${fabric_version}")
+}
+
+loom {
+    def aw = project(':common').file("src/main/resources/${mod_id}.accesswidener")
+    if (aw.exists()) {
+        accessWidenerPath.set(aw)
+    }
+    runs {
+        client {
+            client()
+            setConfigName('Fabric Client')
+            ideConfigGenerated(true)
+            runDir('runs/client')
+        }
+        server {
+            server()
+            setConfigName('Fabric Server')
+            ideConfigGenerated(true)
+            runDir('runs/server')
+        }
+    }
+}
+
+// Implement mcgradleconventions loader attribute
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements', 'includeInternal', 'modCompileClasspath'].each { variant ->
+    configurations.named(variant) {
+        attributes {
+            attribute(loaderAttribute, 'fabric')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant->
+        configurations.named(variant) {
+            attributes {
+                attribute(loaderAttribute, 'fabric')
+            }
+        }
+    }
+}
+
+// OCWO automated game tests (headless server): ./gradlew :fabric:runGameTest
+// The test server needs the Minecraft EULA to be accepted (eula = true) by the project owner.
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = "ocwo-gametest"
+        enableGameTests = true
+        enableClientGameTests = false
+        eula = true // accepted by the project owner (Valentin) on 2026-11-12, test server only
+    }
+}
+
+// Regular game tests only (pressure scenarios): ./gradlew :fabric:runGameTest
+// Performance scenarios, separately: ./gradlew :fabric:runGameTestPerf
+afterEvaluate {
+    loom.runs.named('gameTest') {
+        vmArg '-Dfabric-api.gametest.filter=ocwo-gametest:pressure_*'
+    }
+}
+loom {
+    runs {
+        gameTestPerf {
+            server()
+            name = 'Game Test (performance)'
+            source sourceSets.gametest
+            runDir 'build/run/gameTestPerf'
+            ideConfigGenerated false
+            vmArg '-Dfabric-api.gametest'
+            vmArg '-Dfabric-api.gametest.filter=ocwo-gametest:performance_*'
+        }
+    }
+}
+
+// Dev tool: dumps every block of the game (for the OCWO material classification): ./gradlew :fabric:runBlockDump
+loom {
+    runs {
+        blockDump {
+            server()
+            name = 'Block dump'
+            source sourceSets.gametest
+            runDir 'build/run/blockDump'
+            ideConfigGenerated false
+            vmArg '-Dfabric-api.gametest'
+            vmArg '-Dfabric-api.gametest.filter=ocwo-gametest:tools_*'
+            vmArg "-Docwo.dump=${rootProject.file('../../tools/blocks-26.3-raw.json').absolutePath.replace(File.separator, '/')}"
+        }
+    }
+}

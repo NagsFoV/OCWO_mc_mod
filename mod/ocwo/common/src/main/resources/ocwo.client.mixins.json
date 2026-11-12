@@ -1,0 +1,20 @@
+{
+	"required": true,
+	"package": "io.github.nagsfov.ocwo.client.mixins",
+	"compatibilityLevel": "JAVA_25",
+	"mixins": [
+		"_fluids.WaterFluidClientMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"plugin": "io.github.nagsfov.ocwo.client.OcwoClientMixinPlugin",
+	"client": [
+		"_fluids.FluidRendererMixin",
+		"_fluids._layer.FluidRendererLayerMixin",
+		"_fluids._layer.RenderSectionRegionFluidMixin",
+		"_fluids._layer.SectionCompilerFluidMixin",
+		"_fluids._layer.SectionCopyFluidMixin",
+		"_fluids.FluidCeilingRenderMixin"
+	]
+}

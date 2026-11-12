@@ -1,0 +1,19 @@
+{
+	"schemaVersion": 1,
+	"id": "ocwo-gametest",
+	"version": "1.0.0",
+	"name": "OCWO game tests",
+	"environment": "*",
+	"entrypoints": {
+		"fabric-gametest": [
+			"io.github.nagsfov.ocwo.gametest.PressureGameTests",
+			"io.github.nagsfov.ocwo.gametest.PressureLightGameTests",
+			"io.github.nagsfov.ocwo.gametest.PerformanceGameTests",
+			"io.github.nagsfov.ocwo.gametest.ToolsGameTests"
+		]
+	},
+	"depends": {
+		"ocwo": "*",
+		"fabric-gametest-api-v1": "*"
+	}
+}

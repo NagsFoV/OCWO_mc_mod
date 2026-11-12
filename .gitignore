@@ -1,0 +1,22 @@
+# Local references, not part of OCWO
+# - PhysEx-Reborn: upstream clone (public at https://github.com/Sasai-Kudasai-BM/PhysEx-Reborn)
+# - skdslib-reference: the PhysEx author's library, extracted for reference only (no licence: never publish)
+mod/PhysEx-Reborn/
+mod/skdslib-reference/
+
+# Build outputs and caches (also ignored by mod/ocwo/.gitignore)
+build/
+.gradle/
+run/
+runs/
+__pycache__/
+*.pyc
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Exports from the classification page (the page's shared store is the source of truth)
+tools/ocwo-classement-blocs*.json

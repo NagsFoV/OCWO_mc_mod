@@ -1,0 +1,45 @@
+{
+	"schemaVersion": 1,
+	"id": "${mod_id}",
+	"version": "${version}",
+	"name": "${mod_name}",
+	"description": "${description}",
+	"authors": [
+		"${mod_author}"
+	],
+	"contributors": [
+		"Sasai_Kudasai_BM (original PhysEx-Reborn author)"
+	],
+	"contact": {
+		"sources": "https://github.com/Sasai-Kudasai-BM/PhysEx-Reborn"
+	},
+	"license": "${license}",
+	"icon": "${mod_id}.png",
+	"environment": "*",
+	"accessWidener": "ocwo.accesswidener",
+	"entrypoints": {
+		"main": [
+			"io.github.nagsfov.ocwo.OcwoFabric"
+		],
+		"client": [
+			"io.github.nagsfov.ocwo.OcwoFabricClient"
+		]
+	},
+	"mixins": [
+		"ocwo.common.mixins.json",
+		{
+			"config": "ocwo.server.mixins.json",
+			"environment": "server"
+		},
+		{
+			"config": "ocwo.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=${fabric_loader_version}",
+		"fabric-api": "*",
+		"minecraft": "~${minecraft_version}",
+		"java": ">=${java_version}"
+	}
+}

@@ -1,0 +1,33 @@
+{
+	"required": true,
+	"package": "io.github.nagsfov.ocwo.mixins",
+	"compatibilityLevel": "JAVA_25",
+	"mixins": [
+		"_fluids.FlowingFluidMixin",
+		"_fluids.LiquidBlockMixin",
+		"_fluids.ServerWorldFluidsMixin",
+		"_fluids.WorldFluidsMixin",
+		"_fluids._layer.BlockStateBaseMixin",
+		"_fluids._layer.LiquidBlockLayerMixin",
+		"_fluids._layer.PistonMovingBlockEntityLayerMixin",
+		"_fluids._layer.ServerWorldFluidsLayerMixin",
+		"_fluids._layer.WorldChunkFluidMixin",
+		"_fluids.tweaks.BoatMixin",
+		"_fluids.tweaks.BottleItemMixin",
+		"_fluids.tweaks.BucketItemFluidMixin",
+		"_fluids.tweaks.DoubleBlockDisplacerFluidMixin",
+		"_fluids.tweaks.DoubleBlockFluidMixin",
+		"_fluids.tweaks.DoubleHighBlockItemFluidMixin",
+		"_fluids.tweaks.FallingBlockFluidMixin",
+		"_fluids.tweaks.FarmBlockFluidMixin",
+		"_fluids.tweaks.KelpBlockMixin",
+		"_fluids.tweaks.LiquidBlockMixin",
+		"_fluids.tweaks.PistonBaseBlockMixin",
+		"_fluids.tweaks.PointedDripstoneBlockMixin",
+		"_fluids.FlowingFluidCeilingMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"plugin": "io.github.nagsfov.ocwo.OcwoMixinPlugin"
+}

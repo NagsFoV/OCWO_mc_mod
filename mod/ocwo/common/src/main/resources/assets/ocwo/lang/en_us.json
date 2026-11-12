@@ -1,0 +1,17 @@
+{
+	"gamerule.ocwo.task_limit": "Fluid tasks limit",
+	"gamerule.ocwo.task_limit.description": "Limit for fluid update tasks",
+	"gamerule.ocwo.dripstone_fill_cauldron": "Dripstone fill cauldron",
+	"gamerule.ocwo.dripstone_fill_cauldron.description": "Will dripstone fill cauldrons",
+	"gamerule.ocwo.fluid_displacement_limit": "Fluid displacement limit",
+	"gamerule.ocwo.fluid_displacement_limit.description": "Maximum distance for fluids to find the way out when block placed in (0 = no displacement)",
+	"gamerule.ocwo.water_hot_fluid_evaporation": "Water evaporation upon contact with lava",
+	"gamerule.ocwo.water_hot_fluid_evaporation.description": "Number of layers that will evaporate (0 = no evaporation)",
+	"gamerule.ocwo.farmland_water_intake": "Farmland consumes water",
+	"gamerule.ocwo.farmland_water_intake.description": "Farmland consumes water, farmland also need to be connected with dirt-like block with water (0 = no consumption, -1 = vanilla behavior)",
+	"gamerule.ocwo.bucket_area_pickup": "Bucket picks up water around",
+	"gamerule.ocwo.bucket_area_pickup.description": "true (AREA): a bucket used on a block that is not full also takes water from the connected blocks around it on the same layer (up to 16 blocks, 4 blocks away), until full. false (COLUMN): only the targeted block and the block below it (PhysEx behaviour)",
+	"gamerule.ocwo.pressure_search_limit": "Water pressure search limit",
+	"gamerule.ocwo.pressure_search_limit.description": "Max number of full fluid blocks searched to find the highest surface of a body of water (hydraulic pressure: tunnels fill completely, connected vessels reach the same level, fountains). 0 = pressure disabled",
+	"tooltip.ocwo.bucket_content": "%s: %sB"
+}

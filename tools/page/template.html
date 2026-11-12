@@ -1,0 +1,456 @@
+<title>Classement des blocs OCWO</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap">
+<style>
+/* Layout: one column, sticky header with tabs; dense lists with a bottom sheet for editing (phone first). */
+:root {
+  --bg: #f4f6f5; --surface: #ffffff; --surface-2: #e9eeec; --line: #d3dbd8;
+  --fg: #1d2624; --muted: #5d6b67; --accent: #2b6f8a; --accent-ink: #ffffff;
+  --water: #3d8db0; --ok: #2f7d4f; --warn: #a86a12; --bad: #b0412f;
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-head: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121817; --surface: #1a2220; --surface-2: #222c2a; --line: #33403d;
+  --fg: #e3ebe8; --muted: #9aa9a5; --accent: #6db7d4; --accent-ink: #0d1a20;
+  --water: #6db7d4; --ok: #6cc28f; --warn: #e0a54a; --bad: #e27a66; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121817; --surface: #1a2220; --surface-2: #222c2a; --line: #33403d;
+  --fg: #e3ebe8; --muted: #9aa9a5; --accent: #6db7d4; --accent-ink: #0d1a20;
+  --water: #6db7d4; --ok: #6cc28f; --warn: #e0a54a; --bad: #e27a66; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 15px; line-height: 1.45; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 980px; margin: 0 auto; }
+header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+header .wrap { padding-block: 10px 0; display: grid; gap: 8px; }
+.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font-family: var(--font-head); font-size: 1.25rem; margin: 0; letter-spacing: .01em; text-wrap: balance; }
+.status { font-size: .8rem; color: var(--muted); }
+.status b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.progress { height: 4px; background: var(--surface-2); border-radius: 2px; overflow: hidden; }
+.progress i { display: block; height: 100%; background: var(--water); width: 0; transition: width .3s; }
+nav { display: flex; gap: 4px; }
+nav button { flex: 1; font: 600 .9rem var(--font-ui); background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); padding: 10px 4px 8px; cursor: pointer; }
+nav button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+main .wrap { padding-block: 14px 80px; display: grid; gap: 12px; }
+.note { font-size: .85rem; color: var(--muted); margin: 0; }
+.banner { border: 1px solid var(--line); background: var(--surface-2); border-radius: var(--radius); padding: 10px 12px; font-size: .85rem; }
+.banner.bad { border-color: var(--bad); }
+/* controls */
+input, select, textarea { font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+input:focus-visible, select:focus-visible, button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn { font: 600 .88rem var(--font-ui); border-radius: 8px; padding: 9px 14px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.small { padding: 5px 10px; font-size: .8rem; }
+.btn:disabled { opacity: .5; cursor: default; }
+.filters { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.filters .search { grid-column: 1 / -1; }
+@media (min-width: 720px) { .filters { grid-template-columns: 2fr 1fr 1fr 1fr 1fr; } .filters .search { grid-column: auto; } }
+.bulk { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: .85rem; color: var(--muted); }
+/* lists */
+.list { display: grid; gap: 6px; }
+.row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 9px 12px; cursor: pointer; text-align: left; font: inherit; color: inherit; width: 100%; }
+.row:hover { border-color: var(--accent); }
+.row .name { font-family: var(--font-mono); font-size: .86rem; overflow-wrap: anywhere; min-width: 0; }
+.row .meta { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: .76rem; color: var(--muted); }
+.pill { display: inline-block; font-size: .74rem; padding: 2px 8px; border-radius: 99px; background: var(--surface-2); color: var(--fg); white-space: nowrap; }
+.pill.mat { background: color-mix(in srgb, var(--water) 16%, var(--surface)); }
+.conf { font: 600 .7rem var(--font-mono); padding: 2px 6px; border-radius: 4px; border: 1px solid currentColor; }
+.conf.H { color: var(--ok); } .conf.M { color: var(--warn); } .conf.L { color: var(--bad); }
+.done { font-size: .74rem; color: var(--ok); font-weight: 600; }
+.todo { font-size: .74rem; color: var(--muted); }
+.edited { font-size: .74rem; color: var(--accent); font-weight: 600; }
+.more { justify-self: center; }
+/* materials */
+.mat-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; display: grid; gap: 10px; }
+.mat-card h3 { margin: 0; font-family: var(--font-head); font-size: 1.05rem; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.mat-card h3 small { font: 400 .78rem var(--font-ui); color: var(--muted); }
+.mat-card p { margin: 0; font-size: .82rem; color: var(--muted); }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+@media (min-width: 720px) { .fields { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.field { display: grid; gap: 3px; font-size: .78rem; color: var(--muted); min-width: 0; }
+.field.wide { grid-column: 1 / -1; }
+.field input, .field select { width: 100%; }
+.check { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--fg); min-height: 38px; }
+.check input { width: 20px; height: 20px; }
+/* sheet */
+.sheet-back { position: fixed; inset: 0; background: rgb(0 0 0 / .35); z-index: 20; }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; background: var(--surface); border-radius: 16px 16px 0 0; max-height: 88vh; overflow-y: auto;
+  padding: 14px max(16px, env(safe-area-inset-right, 0px)) calc(18px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); display: grid; gap: 12px; box-shadow: 0 -8px 30px rgb(0 0 0 / .2); }
+@media (min-width: 720px) { .sheet { left: 50%; transform: translateX(-50%); width: 640px; bottom: 24px; border-radius: 16px; } }
+.sheet h2 { margin: 0; font: 600 1rem var(--font-mono); overflow-wrap: anywhere; }
+.sheet .facts { display: flex; gap: 6px; flex-wrap: wrap; }
+.sheet .tags { font: .74rem var(--font-mono); color: var(--muted); overflow-wrap: anywhere; }
+.sheet fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 8px; margin: 0; }
+.sheet legend { font-size: .8rem; color: var(--muted); padding: 0 4px; }
+.sheet .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.confirm { border: 1px solid var(--warn); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 8px; font-size: .88rem; background: var(--surface); }
+pre.export { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; font: .74rem/1.4 var(--font-mono); max-height: 50vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+</style>
+
+<header>
+  <div class="wrap">
+    <div class="top">
+      <h1>Classement des blocs OCWO</h1>
+      <span class="status" id="status">Chargement…</span>
+    </div>
+    <div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
+    <nav role="tablist">
+      <button role="tab" id="tab-blocks" aria-selected="true" data-tab="blocks">Blocs</button>
+      <button role="tab" id="tab-materials" aria-selected="false" data-tab="materials">Matériaux</button>
+      <button role="tab" id="tab-export" aria-selected="false" data-tab="export">Export</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <div id="dbBanner" class="banner" hidden></div>
+
+    <section id="view-blocks" class="list-view" style="display:grid;gap:12px">
+      <p class="note">Les blocs les moins sûrs apparaissent en premier. Touchez un bloc pour changer son matériau, régler ses exceptions et le marquer comme relu.</p>
+      <div class="filters">
+        <input id="q" class="search" type="search" placeholder="Rechercher un bloc (ex. basalt)" aria-label="Rechercher un bloc">
+        <select id="fMat" aria-label="Filtrer par matériau"></select>
+        <select id="fConf" aria-label="Filtrer par confiance">
+          <option value="">Toute confiance</option>
+          <option value="L">Confiance basse</option>
+          <option value="M">Confiance moyenne</option>
+          <option value="H">Confiance haute</option>
+        </select>
+        <select id="fReview" aria-label="Filtrer par relecture">
+          <option value="">Relus et non relus</option>
+          <option value="todo">Non relus</option>
+          <option value="done">Relus</option>
+          <option value="edited">Avec exception</option>
+        </select>
+        <input id="fTag" list="tagList" placeholder="Tag (ex. minecraft:logs)" aria-label="Filtrer par tag">
+        <datalist id="tagList"></datalist>
+      </div>
+      <div class="bulk">
+        <span id="count"></span>
+        <button class="btn small" id="bulkReview">Marquer ces blocs relus</button>
+        <button class="btn small" id="bulkMaterial">Changer le matériau de ces blocs</button>
+      </div>
+      <div id="bulkConfirm" class="confirm" hidden></div>
+      <div class="list" id="blockList"></div>
+      <button class="btn more" id="more" hidden>Afficher plus</button>
+    </section>
+
+    <section id="view-materials" hidden style="display:grid;gap:12px">
+      <p class="note">Valeurs par défaut de chaque matériau. Unité de capacité : le niveau d'eau (1/8 de bloc). Perméabilité : de 0 (étanche) à 10 (très rapide). Un bloc saturé suinte vers le bas et les côtés, sauf s'il change d'état à ce stade ou s'il retient l'eau.</p>
+      <div class="list" id="matList"></div>
+    </section>
+
+    <section id="view-export" hidden style="display:grid;gap:12px">
+      <p class="note">Le classement complet : matériaux avec leurs valeurs, et chaque bloc avec son matériau et ses exceptions. Claude le relit directement depuis cette page ; l'export sert de copie.</p>
+      <div class="bulk">
+        <button class="btn primary" id="saveFile">Enregistrer le fichier JSON</button>
+        <button class="btn" id="copyJson">Copier le JSON</button>
+        <span id="exportMsg"></span>
+      </div>
+      <pre class="export" id="exportPre"></pre>
+    </section>
+  </div>
+</main>
+
+<div id="sheetBack" class="sheet-back" hidden></div>
+<div id="sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden></div>
+
+<script type="application/json" id="seed">__DATA__</script>
+<script>
+(() => {
+  const SEED = JSON.parse(document.getElementById('seed').textContent);
+  const STAGES = [['sec', 'Sec'], ['humide', 'Humide'], ['mouille', 'Mouillé'], ['sature', 'Saturé']];
+  const TAGS = SEED.tags;
+  const MATS = SEED.materials;               // [{id,label,description,defaults}]
+  const MAT_BY_ID = Object.fromEntries(MATS.map(m => [m.id, m]));
+  const BLOCKS = SEED.blocks.map(b => ({ name: b[0], mat: b[1], rule: b[2], conf: b[3], fixed: b[4].includes('F'),
+    waterlog: b[4].includes('W') ? 'W' : (b[4].includes('A') ? 'A' : ''), orient: b[5], tags: b[6].map(i => TAGS[i]) }));
+  const BY_NAME = Object.fromEntries(BLOCKS.map(b => [b.name, b]));
+  const CONF_ORDER = { L: 0, M: 1, H: 2 };
+
+  const state = { matEdits: {}, blockEdits: {}, db: null, tab: 'blocks', shown: 60, writable: true };
+
+  // ---------- helpers ----------
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const matLabel = id => (MAT_BY_ID[id] || { label: id }).label;
+  function matValues(id) { return Object.assign({}, MAT_BY_ID[id]?.defaults || {}, state.matEdits[id] || {}); }
+  function blockEdit(name) { return state.blockEdits[name] || {}; }
+  function effectiveMat(b) { return blockEdit(b.name).material || b.mat; }
+  function isReviewed(b) { return !!blockEdit(b.name).reviewed; }
+  function hasException(b) { const e = blockEdit(b.name); return !!(e.material || (e.override && Object.keys(e.override).length) || e.fixedWater != null); }
+
+  // ---------- storage (db capability) ----------
+  async function connect() {
+    let timer = setTimeout(() => showBanner('La connexion au stockage partagé ne répond pas. Les modifications ne seront pas enregistrées.', true), 10000);
+    try {
+      const db = await window.claude?.use?.('db');
+      if (!db) { clearTimeout(timer); showBanner('Stockage partagé indisponible ici (connectez-vous à claude.ai). Vous pouvez consulter, mais pas enregistrer.', true); state.writable = false; render(); return; }
+      state.db = db;
+      let pending = 2;
+      const ready = () => { if (--pending === 0) { clearTimeout(timer); setStatus(); } };
+      db.collection('materials').onSnapshot(snap => {
+        state.matEdits = {}; snap.docs.forEach(d => { state.matEdits[d.id] = d.data() || {}; });
+        if (pending) ready(); render();
+      }, e => showBanner('Lecture des matériaux impossible : ' + e.message, true));
+      db.collection('blocks').onSnapshot(snap => {
+        state.blockEdits = {}; snap.docs.forEach(d => { state.blockEdits[d.id] = d.data() || {}; });
+        if (pending) ready(); render();
+      }, e => showBanner('Lecture des blocs impossible : ' + e.message, true));
+    } catch (e) { clearTimeout(timer); showBanner('Stockage partagé indisponible : ' + (e.message || e), true); }
+  }
+  function showBanner(msg, bad) { const el = $('dbBanner'); el.textContent = msg; el.classList.toggle('bad', !!bad); el.hidden = false; }
+  async function writeBlock(name, data) {
+    if (!state.db) return;
+    const clean = JSON.parse(JSON.stringify(data));
+    try {
+      if (!Object.keys(clean).length) await state.db.collection('blocks').doc(name).delete();
+      else await state.db.collection('blocks').doc(name).set(clean);
+    } catch (e) { showBanner('Enregistrement refusé : ' + (e.message || e.code), true); }
+  }
+  async function writeMaterial(id, data) {
+    if (!state.db) return;
+    try { await state.db.collection('materials').doc(id).set(data); }
+    catch (e) { showBanner('Enregistrement refusé : ' + (e.message || e.code), true); }
+  }
+
+  // ---------- status ----------
+  function setStatus() {
+    const reviewed = BLOCKS.filter(isReviewed).length;
+    $('status').innerHTML = `<b>${reviewed}</b> / ${BLOCKS.length} blocs relus`;
+    $('progressBar').style.width = (100 * reviewed / BLOCKS.length).toFixed(1) + '%';
+  }
+
+  // ---------- blocks view ----------
+  function filtered() {
+    const q = $('q').value.trim().toLowerCase();
+    const fm = $('fMat').value, fc = $('fConf').value, fr = $('fReview').value, ft = $('fTag').value.trim();
+    return BLOCKS.filter(b => {
+      if (q && !b.name.includes(q)) return false;
+      if (fm && effectiveMat(b) !== fm) return false;
+      if (fc && b.conf !== fc) return false;
+      if (fr === 'todo' && isReviewed(b)) return false;
+      if (fr === 'done' && !isReviewed(b)) return false;
+      if (fr === 'edited' && !hasException(b)) return false;
+      if (ft && !b.tags.includes(ft)) return false;
+      return true;
+    }).sort((a, b) => (isReviewed(a) - isReviewed(b)) || (CONF_ORDER[a.conf] - CONF_ORDER[b.conf]) || (effectiveMat(a) === 'autre' ? -1 : 0) - (effectiveMat(b) === 'autre' ? -1 : 0) || a.name.localeCompare(b.name));
+  }
+  function renderBlocks() {
+    const list = filtered();
+    $('count').textContent = `${list.length} bloc${list.length > 1 ? 's' : ''}`;
+    const html = list.slice(0, state.shown).map(b => {
+      const m = effectiveMat(b);
+      const e = blockEdit(b.name);
+      return `<button class="row" data-block="${esc(b.name)}">
+        <span class="name">${esc(b.name)}</span>
+        <span class="pill mat">${esc(matLabel(m))}</span>
+        <span class="meta"><span class="conf ${b.conf}" title="Confiance">${b.conf}</span>
+          <span>${esc(SEED.rules[b.rule] || b.rule)}</span>
+          ${b.fixed || e.fixedWater != null ? '<span class="pill">eau fixe</span>' : ''}
+          ${hasException(b) ? '<span class="edited">exception</span>' : ''}
+          ${isReviewed(b) ? '<span class="done">relu</span>' : '<span class="todo">à relire</span>'}</span>
+      </button>`;
+    }).join('');
+    $('blockList').innerHTML = html || '<p class="note">Aucun bloc ne correspond à ces filtres.</p>';
+    $('more').hidden = list.length <= state.shown;
+  }
+
+  // ---------- bulk ----------
+  function bulkConfirm(kind) {
+    const list = filtered();
+    const box = $('bulkConfirm');
+    if (!state.writable) { showBanner('Enregistrement impossible ici.', true); return; }
+    if (kind === 'review') {
+      box.innerHTML = `<span>Marquer les ${list.length} blocs affichés comme relus ?</span>
+        <div class="bulk"><button class="btn primary small" id="bulkGo">Marquer relus</button><button class="btn small" id="bulkCancel">Annuler</button></div>`;
+    } else {
+      box.innerHTML = `<span>Donner le même matériau aux ${list.length} blocs affichés :</span>
+        <select id="bulkMat">${MATS.map(m => `<option value="${m.id}">${esc(m.label)}</option>`).join('')}</select>
+        <label class="check"><input type="checkbox" id="bulkAlsoReview" checked> Les marquer relus aussi</label>
+        <div class="bulk"><button class="btn primary small" id="bulkGo">Appliquer</button><button class="btn small" id="bulkCancel">Annuler</button></div>`;
+    }
+    box.hidden = false;
+    $('bulkCancel').onclick = () => { box.hidden = true; };
+    $('bulkGo').onclick = async () => {
+      box.hidden = true;
+      const mat = kind === 'material' ? $('bulkMat').value : null;
+      const alsoReview = kind === 'review' || $('bulkAlsoReview')?.checked;
+      for (const b of list) {
+        const e = Object.assign({}, blockEdit(b.name));
+        if (mat) { if (mat === b.mat) delete e.material; else e.material = mat; }
+        if (alsoReview) e.reviewed = true;
+        await writeBlock(b.name, e);
+      }
+    };
+  }
+
+  // ---------- block sheet ----------
+  function openBlock(name) {
+    const b = BY_NAME[name]; if (!b) return;
+    const e = blockEdit(name), o = e.override || {};
+    const m = effectiveMat(b), mv = matValues(m);
+    const orient = b.orient === 'axis' ? 'axis' : (b.orient === 'facing' ? 'facing' : '');
+    const dirFields = orient
+      ? `<div class="fields">
+          <label class="field">Perméabilité le long de ${orient === 'axis' ? "l'axe" : 'la direction'}<input id="oAlong" type="number" min="0" max="10" step="1" value="${o.along ?? ''}" placeholder="${mv.permeability ?? ''}"></label>
+          <label class="field">Perméabilité en travers<input id="oAcross" type="number" min="0" max="10" step="1" value="${o.across ?? ''}" placeholder="${mv.permeability ?? ''}"></label>
+        </div><p class="note">Ce bloc est orienté (${orient === 'axis' ? 'propriété axis' : 'propriété facing'}) : les valeurs suivent sa rotation une fois posé.</p>`
+      : `<div class="fields">
+          <label class="field">Vers le haut<input id="oUp" type="number" min="0" max="10" step="1" value="${o.up ?? ''}" placeholder="${mv.permeability ?? ''}"></label>
+          <label class="field">Vers le bas<input id="oDown" type="number" min="0" max="10" step="1" value="${o.down ?? ''}" placeholder="${mv.permeability ?? ''}"></label>
+          <label class="field">Côtés<input id="oSide" type="number" min="0" max="10" step="1" value="${o.side ?? ''}" placeholder="${mv.permeability ?? ''}"></label>
+        </div>`;
+    $('sheet').innerHTML = `
+      <h2 id="sheetTitle">minecraft:${esc(b.name)}</h2>
+      <div class="facts"><span class="conf ${b.conf}">${b.conf}</span><span class="pill">${esc(SEED.rules[b.rule] || b.rule)}</span><span class="pill">classé : ${esc(matLabel(b.mat))}</span>${b.waterlog === 'W' ? '<span class="pill">peut contenir de l’eau liquide dans sa case</span>' : ''}${b.waterlog === 'A' ? '<span class="pill">toujours dans l’eau (aquatique)</span>' : ''}</div>
+      <p class="note">L'humidité (eau retenue dans le bloc) et l'eau liquide qui occupe la case du bloc sont deux choses distinctes : un bloc sans humidité peut quand même être dans l'eau.</p>
+      <label class="field wide">Matériau
+        <select id="sMat">${MATS.map(x => `<option value="${x.id}" ${x.id === m ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select></label>
+      <fieldset><legend>Réglage propre au bloc (vide = valeur du matériau)</legend>
+        <div class="fields">
+          <label class="field">Capacité (niveaux)<input id="oCap" type="number" min="0" max="64" step="1" value="${o.capacity ?? ''}" placeholder="${mv.capacity ?? ''}"></label>
+          <label class="field">Perméabilité (0 à 10)<input id="oPerm" type="number" min="0" max="10" step="1" value="${o.permeability ?? ''}" placeholder="${mv.permeability ?? ''}"></label>
+        </div>
+        <p class="note">Perméabilité selon la face :</p>
+        ${dirFields}
+      </fieldset>
+      <fieldset><legend>Eau fixe (bloc fait d'eau : boue, glace, neige…)</legend>
+        <label class="check"><input type="checkbox" id="sFixed" ${(e.fixedWater != null ? e.fixedWater > 0 : b.fixed) ? 'checked' : ''}> Ce bloc est fait d'eau</label>
+        <label class="field">Quantité d'eau (niveaux)<input id="sFixedLv" type="number" min="1" max="64" step="1" value="${e.fixedWater ?? (b.fixed ? 8 : '')}"></label>
+      </fieldset>
+      <label class="check"><input type="checkbox" id="sReviewed" ${isReviewed(b) ? 'checked' : ''}> Relu</label>
+      <div class="tags">${b.tags.length ? esc(b.tags.join(' · ')) : 'Aucun tag'}</div>
+      <div class="actions">
+        <button class="btn" id="sReset">Revenir au classement automatique</button>
+        <button class="btn" id="sClose">Fermer</button>
+        <button class="btn primary" id="sSave" ${state.writable ? '' : 'disabled'}>Enregistrer</button>
+      </div>`;
+    showSheet(true);
+    const num = id => { const v = $(id)?.value; return v === '' || v == null ? undefined : Math.max(0, Number(v)); };
+    $('sClose').onclick = () => showSheet(false);
+    $('sReset').onclick = async () => { await writeBlock(name, {}); showSheet(false); };
+    $('sSave').onclick = async () => {
+      const ne = {};
+      const mat = $('sMat').value; if (mat !== b.mat) ne.material = mat;
+      const ov = { capacity: num('oCap'), permeability: num('oPerm'), along: num('oAlong'), across: num('oAcross'), up: num('oUp'), down: num('oDown'), side: num('oSide') };
+      Object.keys(ov).forEach(k => ov[k] === undefined && delete ov[k]);
+      if (Object.keys(ov).length) ne.override = ov;
+      const fixed = $('sFixed').checked, lv = num('sFixedLv') || 8;
+      if (fixed !== b.fixed || (fixed && lv !== 8)) ne.fixedWater = fixed ? lv : 0;
+      if ($('sReviewed').checked) ne.reviewed = true;
+      await writeBlock(name, ne);
+      showSheet(false);
+    };
+  }
+  function showSheet(on) { $('sheet').hidden = !on; $('sheetBack').hidden = !on; if (on) $('sMat')?.focus(); }
+
+  // ---------- materials view ----------
+  function renderMaterials() {
+    const counts = {};
+    BLOCKS.forEach(b => { const m = effectiveMat(b); counts[m] = (counts[m] || 0) + 1; });
+    $('matList').innerHTML = MATS.map(m => {
+      const v = matValues(m.id), t = v.transform || {};
+      const stageOpts = sel => STAGES.map(([k, l]) => `<option value="${k}" ${sel === k ? 'selected' : ''}>${l}</option>`).join('');
+      return `<div class="mat-card" data-mat="${m.id}">
+        <h3>${esc(m.label)} <small>${counts[m.id] || 0} blocs${state.matEdits[m.id] ? ' · modifié' : ''}</small></h3>
+        <p>${esc(m.description)}</p>
+        <div class="fields">
+          <label class="field">Capacité (niveaux)<input type="number" min="0" max="64" step="1" data-k="capacity" value="${v.capacity ?? 0}"></label>
+          <label class="field">Perméabilité (0 à 10)<input type="number" min="0" max="10" step="1" data-k="permeability" value="${v.permeability ?? 0}"></label>
+          <label class="check"><input type="checkbox" data-k="stages" ${v.stages ? 'checked' : ''}> Stades visibles</label>
+          <label class="check"><input type="checkbox" data-k="retains" ${v.retains ? 'checked' : ''}> Retient l'eau</label>
+          <label class="field wide">Changement d'état : bloc cible (vide = aucun)<input list="blockIds" data-k="target" value="${esc(t.target || '')}" placeholder="ex. minecraft:mud"></label>
+          <label class="field">Stade d'entrée<select data-k="stageIn"><option value="">-</option>${stageOpts(t.stageIn)}</select></label>
+          <label class="field">Retour en séchant, sous le stade<select data-k="stageOut"><option value="">-</option>${stageOpts(t.stageOut)}</select></label>
+        </div>
+      </div>`;
+    }).join('') + `<datalist id="blockIds">${BLOCKS.map(b => `<option value="minecraft:${b.name}">`).join('')}</datalist>`;
+  }
+  function onMaterialChange(ev) {
+    const card = ev.target.closest('.mat-card'); if (!card) return;
+    const id = card.dataset.mat;
+    const get = k => card.querySelector(`[data-k="${k}"]`);
+    const data = {
+      capacity: Math.max(0, Number(get('capacity').value) || 0),
+      permeability: Math.min(10, Math.max(0, Number(get('permeability').value) || 0)),
+      stages: get('stages').checked,
+      retains: get('retains').checked,
+    };
+    const target = get('target').value.trim();
+    if (target) data.transform = { target, stageIn: get('stageIn').value || null, stageOut: get('stageOut').value || null };
+    else data.transform = null;
+    writeMaterial(id, data);
+  }
+
+  // ---------- export ----------
+  function exportJson() {
+    return JSON.stringify({
+      version: SEED.version,
+      exportedAt: new Date().toISOString(),
+      materials: MATS.map(m => Object.assign({ id: m.id, label: m.label }, matValues(m.id))),
+      blocks: BLOCKS.map(b => {
+        const e = blockEdit(b.name);
+        const o = { id: 'minecraft:' + b.name, material: effectiveMat(b), reviewed: !!e.reviewed };
+        const fixed = e.fixedWater != null ? e.fixedWater : (b.fixed ? 8 : 0);
+        if (fixed) o.fixedWater = fixed;
+        if (e.override && Object.keys(e.override).length) o.override = e.override;
+        if (b.orient) o.orientation = b.orient;
+        return o;
+      }),
+    }, null, 1);
+  }
+  function renderExport() { $('exportPre').textContent = exportJson().slice(0, 6000) + '\n…'; }
+
+  // ---------- render / tabs ----------
+  function render() {
+    setStatus();
+    if (state.tab === 'blocks') renderBlocks();
+    if (state.tab === 'materials' && !document.activeElement?.closest?.('.mat-card')) renderMaterials();
+    if (state.tab === 'export') renderExport();
+  }
+  function setTab(t) {
+    state.tab = t;
+    document.querySelectorAll('nav button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === t)));
+    $('view-blocks').hidden = t !== 'blocks'; $('view-materials').hidden = t !== 'materials'; $('view-export').hidden = t !== 'export';
+    try { localStorage.setItem('ocwo-tab', t); } catch (e) {}
+    render();
+  }
+
+  // ---------- wiring ----------
+  $('fMat').innerHTML = '<option value="">Tous les matériaux</option>' + MATS.map(m => `<option value="${m.id}">${esc(m.label)}</option>`).join('');
+  $('tagList').innerHTML = TAGS.map(t => `<option value="${esc(t)}">`).join('');
+  ['q', 'fMat', 'fConf', 'fReview', 'fTag'].forEach(id => $(id).addEventListener('input', () => { state.shown = 60; renderBlocks(); }));
+  $('more').onclick = () => { state.shown += 120; renderBlocks(); };
+  $('blockList').addEventListener('click', ev => { const r = ev.target.closest('[data-block]'); if (r) openBlock(r.dataset.block); });
+  $('sheetBack').onclick = () => showSheet(false);
+  document.addEventListener('keydown', ev => { if (ev.key === 'Escape') showSheet(false); });
+  $('bulkReview').onclick = () => bulkConfirm('review');
+  $('bulkMaterial').onclick = () => bulkConfirm('material');
+  $('matList').addEventListener('change', onMaterialChange);
+  document.querySelectorAll('nav button').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+  $('copyJson').onclick = async () => {
+    try { await navigator.clipboard.writeText(exportJson()); $('exportMsg').textContent = 'JSON copié.'; }
+    catch (e) { $('exportMsg').textContent = 'Copie refusée : sélectionnez le texte ci-dessous.'; $('exportPre').textContent = exportJson(); }
+  };
+  $('saveFile').onclick = async () => {
+    try {
+      const dl = await window.claude?.use?.('downloads');
+      if (!dl) { $('exportMsg').textContent = 'Enregistrement de fichier indisponible ici : utilisez « Copier ».'; return; }
+      await dl.save({ filename: 'ocwo-classement-blocs.json', data: exportJson() });
+      $('exportMsg').textContent = 'Fichier proposé à l’enregistrement.';
+    } catch (e) { $('exportMsg').textContent = 'Fichier non enregistré.'; }
+  };
+  let startTab = 'blocks';
+  try { startTab = localStorage.getItem('ocwo-tab') || 'blocks'; } catch (e) {}
+  setTab(['blocks', 'materials', 'export'].includes(startTab) ? startTab : 'blocks');
+  connect();
+})();
+</script>
