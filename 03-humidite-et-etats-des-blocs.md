@@ -153,6 +153,36 @@ Trois cas, vérifiés dans le code actuel :
 - Résultat du premier passage : 725 blocs en confiance haute, 519 moyenne, 42 basse (dont 13 non classés : bloc d'os, TNT, générateurs, froglights…). Le matériau « creux » regroupe 481 blocs (portes, clôtures, panneaux, rails, lits…) où l'eau passe comme dans l'air, sans humidité.
 - Prochaine étape : un outil d'édition (page web) pour que Valentin corrige le classement et règle les valeurs des matériaux.
 
+## Implémentation, étape 1 (branche `humidite`, 12/11/2026)
+
+**Données** (`tools/export_datapack.py`) : le classement (pré-classement + modifications faites dans la page, relues depuis son stockage dans `tools/store`) est converti en fichiers de données du mod, rechargeables avec `/reload` :
+- `data/ocwo/ocwo_materials/<matériau>.json` : capacité, perméabilité, stades visibles, « retient l'eau », changement d'état (bloc cible, stade d'entrée, stade de retour, blocs concernés) et la liste des blocs (`#tag` accepté, pour les autres mods) ;
+- `data/ocwo/ocwo_block_settings/<bloc>.json` : réglages propres à un bloc (capacité, perméabilité, perméabilité le long de l'axe et en travers, par face, eau fixe).
+- Valeurs par défaut de la page tant que Valentin n'a pas tout relu. Réglages ajoutés par défaut : basalte et basalte poli (le long de l'axe 4, en travers 0), bloc de bambou (3 / 0).
+- Le changement d'état de la terre ne concerne que la terre, la terre stérile et la terre racinée (pas l'herbe, le podzol ni la terre labourée).
+
+**Stockage** (`MoistureLayer`) : l'humidité de chaque bloc, par section de chunk (tableau créé seulement si la section en contient), en **unités entières : 1 niveau d'eau = 16 unités**, pour une conservation exacte. Sauvegardée avec le chunk, pas encore envoyée aux clients (ce sera l'étape 2, pour l'assombrissement).
+
+**Simulation** (`MoistureSimulation`) : toutes les 10 ticks, seulement sur les blocs « actifs », avec un budget de 2 ms. Un pas d'un bloc :
+1. **absorption** : prend 1 niveau d'eau à un bloc d'eau voisin, avec une probabilité liée à la perméabilité de la face ;
+2. **transmission** aux voisins poreux, selon l'écart de remplissage et la plus faible des deux perméabilités (par face, ou par axe pour les blocs orientés), avec un biais vers le bas ;
+3. **suintement** (règle unique) : un bloc saturé qui reçoit encore (de l'eau ou un voisin saturé au-dessus ou sur le côté) donne 1 niveau d'eau à une case libre en dessous ou à côté, jamais au-dessus, sauf s'il « retient l'eau » ou change d'état à ce stade ;
+4. **changement d'état** : terre → boue au stade « mouillé », boue → terre sous « humide » (hystérésis), poudre de béton → béton de la même couleur, éponge → éponge mouillée. L'humidité est conservée à travers le changement.
+
+Les blocs deviennent actifs quand l'eau bouge à côté d'eux, quand un bloc poreux est posé ou cassé, et par un échantillonnage autour des joueurs (eau immobile contre un bloc poreux). Quand un bloc perd sa capacité (cassé, remplacé), son humidité est rendue en eau sur place ou à côté. Ce qui ne trouve pas de place reste stocké et sera rendu plus tard : rien n'est jamais perdu.
+
+**Eau fixe** : quand on casse un bloc fait d'eau (boue, glace, neige, éponge mouillée), sa quantité d'eau fixe part avec l'objet et le reste de l'humidité est libéré. Limite connue : l'eau des objets n'est pas encore suivie (une boue générée par le monde n'a pas d'humidité, l'objet « contient » donc de l'eau qui n'existait pas). Ce sera réglé avec la génération du monde pré-humidifiée et le suivi de l'eau dans les objets.
+
+**Pluie** : pas d'absorption (pas encore de nuages : la pluie vanilla créerait de l'eau). La règle de jeu `ocwo:rain_moisture_test` (désactivée par défaut, **non conservative**) permet d'essayer l'effet de la pluie sur les blocs de surface.
+
+**Règles de jeu** : `ocwo:moisture_simulation` (activée par défaut), `ocwo:rain_moisture_test` (désactivée).
+
+**Commande de débogage** : `/ocwo moisture [position]` affiche le matériau, l'humidité (unités et niveaux), le stade, la perméabilité de chaque face et les changements d'état prévus ; `/ocwo moisture set <position> <unités>` (opérateurs) fixe l'humidité pour un essai.
+
+**Performance** (test `wetArea`, lancé avec les tests de performance) : un bassin de 48×48, 2 blocs de profondeur, sur un sol de terre et de cobblestone. Sur 2 000 ticks : notre code d'eau prend 3,1 ms par tick en moyenne, dont 0,18 ms pour l'humidité, et 39 ms au pire tick (cibles : 10 et 50 ms). À la fin, 1 150 blocs de terre sont devenus de la boue.
+
+**Tests automatiques** (`CheckMoistureGameTests`, dans les tests courants) : mur de cobblestone qui suinte, laine qui retient, obsidienne étanche, terre sous un bassin qui devient boue, basalte directionnel. Chaque test vérifie à chaque tick que l'eau liquide plus l'humidité ne change pas. Les tests de pression sont désormais construits en obsidienne : avec de la pierre, une partie de l'eau passait dans les murs (comportement normal, mais qui faussait ces tests de pression).
+
 ## Questions ouvertes
 
 - La liste des blocs perméables : quels blocs pleins laissent passer l'eau, et à quelle vitesse ?
