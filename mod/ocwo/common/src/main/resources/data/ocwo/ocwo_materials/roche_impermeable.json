@@ -1,0 +1,13 @@
+{
+ "capacity": 0,
+ "permeability": 0,
+ "stages": false,
+ "retains": false,
+ "blocks": [
+  "minecraft:ancient_debris",
+  "minecraft:bedrock",
+  "minecraft:crying_obsidian",
+  "minecraft:obsidian",
+  "minecraft:reinforced_deepslate"
+ ]
+}

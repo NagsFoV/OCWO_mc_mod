@@ -1,0 +1,18 @@
+{
+ "capacity": 8,
+ "permeability": 5,
+ "stages": false,
+ "retains": true,
+ "transform": {
+  "target": "minecraft:wet_sponge",
+  "stageIn": "sature",
+  "stageOut": "sec",
+  "from": [
+   "minecraft:sponge"
+  ]
+ },
+ "blocks": [
+  "minecraft:sponge",
+  "minecraft:wet_sponge"
+ ]
+}

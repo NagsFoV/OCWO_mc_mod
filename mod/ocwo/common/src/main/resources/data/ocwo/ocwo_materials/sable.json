@@ -1,0 +1,13 @@
+{
+ "capacity": 3,
+ "permeability": 8,
+ "stages": true,
+ "retains": false,
+ "blocks": [
+  "minecraft:red_sand",
+  "minecraft:sand",
+  "minecraft:soul_sand",
+  "minecraft:soul_soil",
+  "minecraft:suspicious_sand"
+ ]
+}

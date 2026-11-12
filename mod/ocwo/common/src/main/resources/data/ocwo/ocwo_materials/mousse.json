@@ -1,0 +1,10 @@
+{
+ "capacity": 6,
+ "permeability": 3,
+ "stages": true,
+ "retains": false,
+ "blocks": [
+  "minecraft:moss_block",
+  "minecraft:pale_moss_block"
+ ]
+}

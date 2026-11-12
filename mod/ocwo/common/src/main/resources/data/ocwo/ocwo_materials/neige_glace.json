@@ -1,0 +1,14 @@
+{
+ "capacity": 0,
+ "permeability": 0,
+ "stages": false,
+ "retains": false,
+ "blocks": [
+  "minecraft:blue_ice",
+  "minecraft:frosted_ice",
+  "minecraft:ice",
+  "minecraft:packed_ice",
+  "minecraft:powder_snow",
+  "minecraft:snow_block"
+ ]
+}

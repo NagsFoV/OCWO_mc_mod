@@ -1,0 +1,11 @@
+{
+ "capacity": 8,
+ "permeability": 1,
+ "stages": true,
+ "retains": false,
+ "blocks": [
+  "minecraft:clay",
+  "minecraft:mud",
+  "minecraft:muddy_mangrove_roots"
+ ]
+}

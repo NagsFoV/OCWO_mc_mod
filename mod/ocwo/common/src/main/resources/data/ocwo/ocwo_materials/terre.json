@@ -1,0 +1,28 @@
+{
+ "capacity": 6,
+ "permeability": 4,
+ "stages": true,
+ "retains": false,
+ "transform": {
+  "target": "minecraft:mud",
+  "stageIn": "mouille",
+  "stageOut": "humide",
+  "from": [
+   "minecraft:dirt",
+   "minecraft:coarse_dirt",
+   "minecraft:rooted_dirt"
+  ]
+ },
+ "blocks": [
+  "minecraft:coarse_dirt",
+  "minecraft:crimson_nylium",
+  "minecraft:dirt",
+  "minecraft:dirt_path",
+  "minecraft:farmland",
+  "minecraft:grass_block",
+  "minecraft:mycelium",
+  "minecraft:podzol",
+  "minecraft:rooted_dirt",
+  "minecraft:warped_nylium"
+ ]
+}

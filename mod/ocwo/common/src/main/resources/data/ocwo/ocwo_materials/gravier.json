@@ -1,0 +1,10 @@
+{
+ "capacity": 2,
+ "permeability": 9,
+ "stages": true,
+ "retains": false,
+ "blocks": [
+  "minecraft:gravel",
+  "minecraft:suspicious_gravel"
+ ]
+}
