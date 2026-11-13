@@ -153,6 +153,29 @@ public final class PressureSearch {
 		return new Search(best, parents, hitSaturated, seen);
 	}
 
+	/** Debug: heights (y * 8 + level) of the highest free surface and the lowest free point of a body of fluid. */
+	public record Inspection(int highHeight, int lowHeight) {
+	}
+
+	/**
+	 * Debug (no transfer): highest free surface and lowest free point of the body of fluid at {@code pos}
+	 * (lowHeight = Integer.MIN_VALUE when there is none). A non-full block with no full block under it is alone.
+	 */
+	public static Inspection inspect(ServerLevel world, BlockPos pos, int limit) {
+		FluidState fs = world.getFluidState(pos);
+		if (fs.isEmpty() || !(fs.getType() instanceof FlowingFluid fluid)) return new Inspection(Integer.MIN_VALUE, Integer.MIN_VALUE);
+		BlockPos start = null;
+		if (isStillFull(fs, fluid)) start = pos;
+		else if (isStillFull(world.getFluidState(pos.below()), fluid)) start = pos.below();
+		if (start == null) return new Inspection(height(pos, fs.getAmount()), Integer.MIN_VALUE);
+		LongOpenHashSet none = new LongOpenHashSet();
+		Search up = search(world, fluid, start, true, none, limit);
+		Search down = search(world, fluid, start, false, none, limit);
+		int high = up.target() == null ? height(start, MAX) : up.target().height();
+		int low = down.target() == null ? Integer.MIN_VALUE : down.target().height();
+		return new Inspection(high, low);
+	}
+
 	/**
 	 * One pressure step for the body of fluid that contains the full block {@code trigger}.
 	 *

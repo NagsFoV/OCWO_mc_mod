@@ -101,6 +101,16 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
 	}
 
 	@Override
+	public void registerDebugPayload() {
+		throw todo();
+	}
+
+	@Override
+	public void sendDebug(net.minecraft.server.level.ServerPlayer player, io.github.nagsfov.ocwo.debug.DebugPayload payload) {
+		throw todo();
+	}
+
+	@Override
 	public boolean isFlammable(BlockState state) {
 		throw todo();
 	}

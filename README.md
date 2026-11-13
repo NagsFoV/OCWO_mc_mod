@@ -29,6 +29,15 @@ gradlew.bat :fabric:runGameTestPerf    # tests de performance (~7 min)
 gradlew.bat :fabric:runBlockDump       # extrait la liste des blocs dans tools/
 ```
 
+## Débogage en jeu
+
+- `/ocwo debug` (opérateur ou triche activée) affiche ou masque, pour le joueur qui la tape, un panneau en haut à droite de l'écran, mis à jour toutes les 10 ticks :
+  - **Tête** : l'eau à hauteur des yeux (niveau sur 8, eau qui tombe, eau dans la couche fluide), la **pression** (profondeur sous la surface libre la plus haute de la masse d'eau, en blocs et en niveaux) et l'état de la masse (équilibrée, ou transferts de pression en attente avec la hauteur du point bas).
+  - **Bloc visé** : identifiant et orientation, eau dans la case, matériau, humidité (unités, niveaux, capacité, pourcentage, stade), perméabilité de chaque face, « retient l'eau », eau fixe, changement d'état prévu, simulé en ce moment ou au repos. Si le regard traverse de l'eau, son niveau est affiché aussi.
+  - **Monde** : coût du code de l'eau par tick (écoulement, pression, humidité), nombre de blocs humides actifs, taille de la file de pression, MSPT du serveur.
+- Les données sont calculées par le serveur et envoyées seulement aux joueurs qui ont activé le panneau (fonctionne aussi en multijoueur). Quand personne ne l'utilise, rien n'est calculé ni mesuré.
+- `/ocwo moisture [x y z]` donne le détail de l'humidité d'un bloc dans le chat ; `/ocwo moisture set <x y z> <unités>` la règle pour un essai.
+
 ## Documents de conception
 
 | Fichier | Contenu |

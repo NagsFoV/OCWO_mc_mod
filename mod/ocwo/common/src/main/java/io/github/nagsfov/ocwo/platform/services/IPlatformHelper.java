@@ -70,6 +70,13 @@ public interface IPlatformHelper {
 	/** Registers server commands. */
 	void registerCommands(java.util.function.Consumer<CommandDispatcher<CommandSourceStack>> registrar);
 
+	// ---- Debug panel ----
+
+	/** Registers the debug panel packet (server to client) and, on the client, its display. */
+	void registerDebugPayload();
+
+	void sendDebug(net.minecraft.server.level.ServerPlayer player, io.github.nagsfov.ocwo.debug.DebugPayload payload);
+
 	// ---- Blocks and fluids ----
 
 	/** Whether fire can burn this block (loader flammability registry). */

@@ -41,6 +41,33 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 
 	private final io.github.nagsfov.ocwo.moisture.MoistureSimulation moisture;
 
+	// Debug panel timing (exponential moving averages, ms), measured only while a player has /ocwo debug on
+	private double debugFlowMs, debugPressureMs, debugMoistureMs;
+
+	public double debugFlowMillis() {
+		return debugFlowMs;
+	}
+
+	public double debugPressureMillis() {
+		return debugPressureMs;
+	}
+
+	public double debugMoistureMillis() {
+		return debugMoistureMs;
+	}
+
+	public double debugTotalMillis() {
+		return debugFlowMs + debugPressureMs + debugMoistureMs;
+	}
+
+	public int pressureQueueSize() {
+		return pressureQueue.size() + pressureDelayed.values().stream().mapToInt(java.util.List::size).sum();
+	}
+
+	private static double ema(double old, long nanos) {
+		return old * 0.9 + nanos / 1e6 * 0.1;
+	}
+
 	// ---- OCWO pressure (see PressureSearch and 06-pression.md) ----
 	private static final int PRESSURE_SAMPLE_PERIOD = 20;
 	private static final int PRESSURE_SAMPLES_PER_PLAYER = 16;
@@ -219,6 +246,8 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 	@Override
 	public void tick(long time, int limit, BiConsumer<BlockPos, Fluid> biConsumer) {
 		long profileStart = OcwoProfiler.isProfiling(world) ? System.nanoTime() : 0L;
+		boolean debug = io.github.nagsfov.ocwo.debug.OcwoDebug.isActive();
+		long d0 = debug ? System.nanoTime() : 0L;
 		taskCounter = 0;
 		blockReadCounter = 0;
 		blockUpdateCounter = 0;
@@ -231,13 +260,16 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		//if (taskCounter > 0)
 		//	System.out.printf("t:%s \te:%s \tr:%s \tu:%s\n", taskCounter, equalizationSet.size(), blockReadCounter, blockUpdateCounter);
 
+		long d1 = debug ? System.nanoTime() : 0L;
 		profiler.push("fluid pressure");
 		long pressureStart = profileStart != 0L ? System.nanoTime() : 0L;
 		samplePressure();
 		tickPressure();
 		if (pressureStart != 0L) OcwoProfiler.addPressureNanos(world, System.nanoTime() - pressureStart);
+		long d2 = debug ? System.nanoTime() : 0L;
 		profiler.popPush("block moisture");
 		moisture.tick();
+		long d3 = debug ? System.nanoTime() : 0L;
 		profiler.popPush("fluid equalization");
 		EqualizationFluidTask task;
 		EqualizationFluidTask bt = equalizationQueue.peekLast();
@@ -274,5 +306,12 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		if (profileStart != 0L) {
 			OcwoProfiler.endTick(world, System.nanoTime() - profileStart);
 		}
+		if (debug) {
+			long d4 = System.nanoTime();
+			debugFlowMs = ema(debugFlowMs, (d1 - d0) + (d4 - d3));
+			debugPressureMs = ema(debugPressureMs, d2 - d1);
+			debugMoistureMs = ema(debugMoistureMs, d3 - d2);
+		}
+		io.github.nagsfov.ocwo.debug.OcwoDebug.tick(world);
 	}
 }

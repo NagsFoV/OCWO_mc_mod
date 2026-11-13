@@ -132,6 +132,21 @@ public class FabricPlatformHelper implements IPlatformHelper {
 		CommandRegistrationCallback.EVENT.register((dispatcher, context, selection) -> registrar.accept(dispatcher));
 	}
 
+	// ---- Debug panel ----
+
+	@Override
+	public void registerDebugPayload() {
+		net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry.clientboundPlay()
+				.register(io.github.nagsfov.ocwo.debug.DebugPayload.TYPE, io.github.nagsfov.ocwo.debug.DebugPayload.STREAM_CODEC);
+	}
+
+	@Override
+	public void sendDebug(net.minecraft.server.level.ServerPlayer player, io.github.nagsfov.ocwo.debug.DebugPayload payload) {
+		if (net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.canSend(player, io.github.nagsfov.ocwo.debug.DebugPayload.TYPE)) {
+			net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(player, payload);
+		}
+	}
+
 	// ---- Blocks and fluids ----
 
 	@Override

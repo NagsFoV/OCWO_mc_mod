@@ -53,6 +53,10 @@ public final class MoistureSimulation {
 		return OcwoFluidGameRules.MOISTURE_SIMULATION != null && level.getGameRules().get(OcwoFluidGameRules.MOISTURE_SIMULATION);
 	}
 
+	public boolean isActive(BlockPos pos) {
+		return active.contains(pos.asLong());
+	}
+
 	public int activeCount() {
 		return active.size();
 	}
