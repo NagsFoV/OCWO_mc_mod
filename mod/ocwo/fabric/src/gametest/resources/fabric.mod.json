@@ -9,7 +9,8 @@
 			"io.github.nagsfov.ocwo.gametest.PressureGameTests",
 			"io.github.nagsfov.ocwo.gametest.PressureLightGameTests",
 			"io.github.nagsfov.ocwo.gametest.PerformanceGameTests",
-			"io.github.nagsfov.ocwo.gametest.ToolsGameTests"
+			"io.github.nagsfov.ocwo.gametest.ToolsGameTests",
+			"io.github.nagsfov.ocwo.gametest.VesselsGameTests"
 		]
 	},
 	"depends": {

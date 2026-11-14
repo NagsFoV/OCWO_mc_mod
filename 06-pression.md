@@ -1,6 +1,47 @@
 # 06. Pression de l'eau
 
-**Statut : modèle validé par Valentin le 12/11/2026. Version 2 de l'algorithme le 12/11/2026, à tester en jeu.** Code : `PressureSearch` (recherches et transfert), déclenchement dans `ClassicFlowTask.pressure`, file de pression et vérification lente dans `CustomFluidTicks`.
+**Statut : modèle validé par Valentin le 12/11/2026. Version 3 de l'algorithme le 14/11/2026 (branche `pression-v3`), à tester en jeu.** Code : `PressureSearch` (recherches et transfert), déclenchement dans `ClassicFlowTask.pressure`, file de pression et vérification lente dans `CustomFluidTicks`.
+
+## Version 3 : recherche par colonnes (14/11/2026)
+
+**Problème signalé par Valentin (13/11/2026)** : les vases communicants recommençaient à bloquer, parfois sur de petits vases (débloqués en rajoutant un peu d'eau) et presque toujours sur les grands (plus de 3×3, plusieurs dizaines de hauteur) ; le panneau de débogage disait « en attente » indéfiniment.
+
+**Causes confirmées par les tests** :
+1. Les recherches de la v2 parcouraient les blocs un par un, vers le haut ou vers le bas en priorité, avec une limite de 256 blocs. Dans un grand vase, il faut traverser des couches entières (25 à 144 blocs chacune) avant d'atteindre l'autre vase : la limite était atteinte avant.
+2. Une recherche arrivée à sa limite sans rien trouver était prise pour « équilibrée » : la masse d'eau était ignorée pendant 20 ticks et ses déclencheurs abandonnés.
+3. Même sur de petits vases : un déclencheur arrivé pendant ces 20 ticks était jeté, puis l'eau se stabilisait (plus aucun déclencheur). C'est ce qui bloquait le vase de 1×1.
+
+**Correction (même modèle validé)** :
+- La masse d'eau est parcourue par **colonnes** : une suite verticale de blocs pleins compte pour un seul nœud. Un vase de 12×12 sur 40 de haut fait 144 nœuds au lieu de 5 760 blocs, donc la recherche couvre entièrement les grandes masses. Une seule recherche trouve à la fois la surface la plus haute et le point libre le plus bas, puis enchaîne jusqu'à 32 transferts d'un niveau, chacun revérifié.
+- La règle de jeu `ocwo:pressure_search_limit` compte désormais des colonnes (1 024 par défaut).
+- Une recherche incomplète n'est **jamais** « équilibrée » : elle est reprise plus tard (délai croissant jusqu'à 64 ticks, 12 essais).
+- Le souvenir « masse équilibrée » ne sert plus qu'à filtrer la vérification lente autour des joueurs ; un déclencheur venu d'une eau qui a bougé est toujours traité, et il efface ce souvenir.
+- Une recherche par masse d'eau et par tick : les autres déclencheurs de la même masse attendent le tick suivant (sans compter d'échec).
+- Débit : une colonne transmet autant de niveaux par tick qu'elle a de blocs (tunnel de 1 de haut : 1 niveau par tick et par colonne ; de 2 de haut : 2).
+- Surface libre : un bloc plein n'en est une que s'il a de l'air ou un bloc remplaçable au-dessus (plus sous un plafond).
+
+**Tests en série** (`VesselsGameTests`, lancés à part avec `gradlew.bat :fabric:runGameTestVessels`, chaque cas seul dans son lot) : deux vases joints par un tunnel, l'un rempli, l'autre vide ; succès quand les deux surfaces restent à un niveau près pendant 100 ticks et que l'inspection (celle du panneau de débogage) dit « équilibrée » ; échec si rien ne bouge pendant 200 ticks alors que c'est déséquilibré ; conservation vérifiée.
+
+| Cas (largeur, hauteur, tunnel, longueur) | Avant (v2) | Après (v3) |
+|---|---|---|
+| 1×1, h10, tunnel 1×1, l5 | bloqué au tick 60 | équilibré au tick 40 |
+| 1×1, h40 | équilibré (230) | équilibré (160) |
+| 3×3, h10 | équilibré (300) | équilibré (290) |
+| 3×3, h20 | équilibré (670) | équilibré (630) |
+| 3×3, h40 | bloqué (1 120) | équilibré (1 360) |
+| 5×5, h20 | bloqué (1 230) | équilibré (1 750) |
+| 5×5, h40 | bloqué (1 220) | équilibré (3 780) |
+| 9×9, h20 | bloqué (1 970) | équilibré (5 850) |
+| 12×12, h20 | bloqué (2 230) | équilibré (10 130) |
+| 5×5, h20, tunnel 1×2 / 2×2 / 3×3 | bloqués (690 / 450 / 260) | équilibrés (950 / 630 / 380) |
+| 5×5, h20, tunnel long de 1 / 20 | bloqués (1 160 / 1 530) | équilibrés (1 690 / 1 850) |
+| 3×3 et 9×9 remplis progressivement | 3×3 équilibré, 9×9 bloqué | équilibrés (740 / 5 920) |
+
+Avant : 12 cas sur 16 bloqués. Après : 16 sur 16 équilibrés. Les grands vases prennent du temps parce que le tunnel de 1×1 ne laisse passer qu'environ 1 niveau par tick (12×12 : environ 1 400 niveaux à faire passer).
+
+**Performance après correction** : lac 32×32×8 vidé, 6,2 ms par tick en moyenne (dont 3,7 ms de pression), 47 ms au pire tick (cibles 10 et 50) ; lac 64×64×16, 25,2 ms (dont 4,5 de pression), contre 22,2 ms pour PhysEx seul.
+
+Non fait : le tunnel sous un lac de 64×64×20 demandé dans la série (les couloirs sous un lac des tests courants couvrent ce cas en plus petit), et une analyse de masse mise en cache sur plusieurs ticks (la recherche par colonnes a suffi).
 
 ## État de l'implémentation (v2)
 

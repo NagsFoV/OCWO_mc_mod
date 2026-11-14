@@ -105,3 +105,18 @@ gradle.taskGraph.whenReady { graph ->
         graph.allTasks.findAll { it.name == 'runGameTest' }.each { it.enabled = false }
     }
 }
+
+// Series of communicating vessels (each case alone in its batch): ./gradlew :fabric:runGameTestVessels
+loom {
+    runs {
+        gameTestVessels {
+            server()
+            name = 'Game Test (vessels)'
+            source sourceSets.gametest
+            runDir 'build/run/gameTestVessels'
+            ideConfigGenerated false
+            vmArg '-Dfabric-api.gametest'
+            vmArg System.getProperty("ocwo.vessels", "-Dfabric-api.gametest.filter=ocwo-gametest:vessels_*")
+        }
+    }
+}
