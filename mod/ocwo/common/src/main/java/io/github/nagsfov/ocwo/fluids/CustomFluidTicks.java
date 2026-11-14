@@ -73,9 +73,10 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 	private static final int PRESSURE_SAMPLES_PER_PLAYER = 16;
 	private static final int PRESSURE_SAMPLE_RADIUS = 32;
 	/** A trigger blocked this many times in a row is dropped (with an increasing delay before). */
-	private static final int PRESSURE_MAX_FAILS = 6;
+	private static final int PRESSURE_MAX_FAILS = 12;
 
-	private record PressureEntry(BlockPos pos, FlowingFluid fluid, long notBefore, int fails) {
+	/** sampled: queued by the slow check near players (not by water that moved). */
+	private record PressureEntry(BlockPos pos, FlowingFluid fluid, long notBefore, int fails, boolean sampled) {
 	}
 
 	/** Entries ready to run (processed from the head, as far as the budget allows). */
@@ -83,7 +84,10 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 	/** Entries waiting for a later tick, by game tick. */
 	private final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<java.util.ArrayList<PressureEntry>> pressureDelayed = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
 	private final LongOpenHashSet pressureQueued = new LongOpenHashSet(256, .5f);
-	private final LongOpenHashSet pressureSaturated = new LongOpenHashSet(256, .5f);
+	/** Columns already explored this tick: other triggers of the same body wait for the next tick. */
+	private final LongOpenHashSet pressureSearched = new LongOpenHashSet(1024, .5f);
+	/** Levels carried this tick by each column of fluid (key = bottom block), see PressureSearch. */
+	private final it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap pressureUsage = new it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap();
 	/** Blocks of bodies found balanced recently: triggers inside them are dropped without a search. */
 	private final LongOpenHashSet pressureBalanced = new LongOpenHashSet(1024, .5f);
 	private static final int PRESSURE_BALANCED_MEMORY = 20;
@@ -127,7 +131,16 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 	/** Queues a full, non-falling block of fluid as the start of a pressure step (deduplicated). */
 	public void enqueuePressure(BlockPos pos, FlowingFluid fluid) {
 		if (pressureQueued.add(pos.asLong())) {
-			pressureQueue.add(new PressureEntry(pos.immutable(), fluid, 0, 0));
+			pressureQueue.add(new PressureEntry(pos.immutable(), fluid, 0, 0, false));
+		}
+		// water moved here: whatever was concluded about this body is outdated
+		pressureBalanced.remove(pos.asLong());
+	}
+
+	/** Queued by the slow check: dropped without a search if its body was found balanced recently. */
+	private void enqueueSampled(BlockPos pos, FlowingFluid fluid) {
+		if (pressureQueued.add(pos.asLong())) {
+			pressureQueue.add(new PressureEntry(pos.immutable(), fluid, 0, 0, true));
 		}
 	}
 
@@ -137,7 +150,8 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 	 * delay, then dropped.
 	 */
 	private void tickPressure() {
-		pressureSaturated.clear();
+		pressureUsage.clear();
+		pressureSearched.clear();
 		long now = world.getGameTime();
 		// Entries delayed to this tick become ready (appended after the ones left from previous ticks).
 		java.util.ArrayList<PressureEntry> due = pressureDelayed.remove(now);
@@ -157,12 +171,21 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		BlockPos.MutableBlockPos lowSide = new BlockPos.MutableBlockPos();
 		PressureEntry e;
 		while (budget > 0 && polls-- > 0 && System.nanoTime() < deadline && (e = pressureQueue.poll()) != null) {
-			if (pressureBalanced.contains(e.pos().asLong())) {
+			if (e.sampled() && pressureBalanced.contains(e.pos().asLong())) {
 				pressureQueued.remove(e.pos().asLong());
 				continue;
 			}
+			if (!pressureSearched.isEmpty()) {
+				long col = PressureSearch.columnKey(world, e.fluid(), e.pos());
+				if (col != 0L && pressureSearched.contains(col)) {
+					// its body was already handled this tick: next tick, without counting a failure
+					delay(e.pos(), e.fluid(), now + 1, e.fails());
+					continue;
+				}
+			}
 			budget--;
-			PressureSearch.Outcome outcome = PressureSearch.step(world, e.fluid(), e.pos(), pressureSaturated, limit, lowSide, pressureBalanced);
+			PressureSearch.Outcome outcome = PressureSearch.step(world, e.fluid(), e.pos(), pressureUsage, limit, lowSide,
+					pressureBalanced, pressureSearched);
 			OcwoProfiler.countPressureStep(world, outcome == PressureSearch.Outcome.MOVED);
 			switch (outcome) {
 				case MOVED -> {
@@ -177,7 +200,7 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 					if (fails > PRESSURE_MAX_FAILS) {
 						pressureQueued.remove(e.pos().asLong());
 					} else {
-						delay(e.pos(), e.fluid(), now + (1L << fails), fails);
+						delay(e.pos(), e.fluid(), now + Math.min(64L, 1L << fails), fails);
 					}
 				}
 				case BALANCED -> pressureQueued.remove(e.pos().asLong());
@@ -185,8 +208,9 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		}
 	}
 
+
 	private void delay(BlockPos pos, FlowingFluid fluid, long tick, int fails) {
-		pressureDelayed.computeIfAbsent(tick, k -> new java.util.ArrayList<>()).add(new PressureEntry(pos, fluid, tick, fails));
+		pressureDelayed.computeIfAbsent(tick, k -> new java.util.ArrayList<>()).add(new PressureEntry(pos, fluid, tick, fails, false));
 	}
 
 	/**
@@ -207,7 +231,7 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 				if (!world.isLoaded(p)) continue;
 				var fs = world.getFluidState(p);
 				if (fs.getType() instanceof FlowingFluid ff && PressureSearch.isStillFull(fs, ff)) {
-					enqueuePressure(p, ff);
+					enqueueSampled(p, ff);
 				}
 			}
 		}

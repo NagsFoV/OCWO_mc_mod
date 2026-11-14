@@ -12,6 +12,6 @@
 	"gamerule.ocwo.bucket_area_pickup": "Bucket picks up water around",
 	"gamerule.ocwo.bucket_area_pickup.description": "true (AREA): a bucket used on a block that is not full also takes water from the connected blocks around it on the same layer (up to 16 blocks, 4 blocks away), until full. false (COLUMN): only the targeted block and the block below it (PhysEx behaviour)",
 	"gamerule.ocwo.pressure_search_limit": "Water pressure search limit",
-	"gamerule.ocwo.pressure_search_limit.description": "Max number of full fluid blocks searched to find the highest surface of a body of water (hydraulic pressure: tunnels fill completely, connected vessels reach the same level, fountains). 0 = pressure disabled",
+	"gamerule.ocwo.pressure_search_limit.description": "Max number of columns of water explored to find the highest surface and the lowest free point of a body of water (hydraulic pressure: tunnels fill completely, connected vessels reach the same level, fountains). 0 = pressure disabled",
 	"tooltip.ocwo.bucket_content": "%s: %sB"
 }

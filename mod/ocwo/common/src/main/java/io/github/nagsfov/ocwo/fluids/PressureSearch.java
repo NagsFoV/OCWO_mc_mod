@@ -1,6 +1,9 @@
 package io.github.nagsfov.ocwo.fluids;
 
+import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongArrayList;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -9,40 +12,46 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FlowingFluid;
 import net.minecraft.world.level.material.FluidState;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.PriorityQueue;
 
 /**
- * OCWO water pressure (hydraulic head), version 2. See 06-pression.md.
+ * OCWO water pressure (hydraulic head), version 3. See 06-pression.md.
  * <p>
- * Inside a connected body of one fluid, one pressure step moves one level from the <b>highest free surface</b>
- * to the <b>lowest free point</b>, as long as their height difference is more than one level.
+ * Inside a connected body of one fluid, a pressure step moves water from the <b>highest free surface</b> to the
+ * <b>lowest free point</b>, one level at a time, as long as their height difference is more than one level.
  * <ul>
  *   <li>Height of a block, in levels: y * 8 + level.</li>
- *   <li>Free surface: a non-full block of the fluid, or a full block whose top is not the fluid.</li>
+ *   <li>Free surface: a non-full block of the fluid, or a full block with air (or a replaceable block) above.</li>
  *   <li>Free point: a non-full block of the fluid, or an empty cell beside or above a full block of the body
  *   (never below: falling stays with the classic flow, which keeps waterfalls as one column).</li>
  * </ul>
- * Both searches go through the full, non-falling blocks of the fluid only: the surface search upward first,
- * the free-point search downward first (so rooms fill layer by layer, from the bottom).
+ * <b>v3, column search</b>: the body is explored as vertical <i>columns</i> of full, non-falling blocks (a column is
+ * one node), breadth first. A tall vessel of w x w blocks is w x w nodes whatever its height, so the search covers
+ * large bodies completely (v2 searched block by block, upward or downward first, and gave up in vessels larger than
+ * a few blocks, which it then wrongly took for balanced). The search limit counts columns. A search that reaches
+ * its limit is <b>incomplete</b>: never "balanced", it is retried later.
  * <p>
- * Flow rate: each full block can carry at most {@link #CAPACITY_PER_TICK} level per tick. A step reserves the
- * blocks of its path; saturated blocks are blocked for the next searches of the same tick. So an opening of one
- * block lets about one level per tick through, an opening of two blocks about two.
+ * Flow rate: a column can carry as many levels per tick as it has blocks (a tunnel 1 high: 1 level per tick per
+ * column of the tunnel, 2 high: 2). Every transfer reserves the columns of its path for the tick.
  */
 public final class PressureSearch {
 
-	/** Levels a full block can carry per tick. */
-	public static final int CAPACITY_PER_TICK = 1;
-
 	private static final int MAX = FluidUtils.MAX_LEVEL;
+	private static final Direction[] HORIZONTAL = {Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST};
 	private static final Direction[] ALL_DIRS = Direction.values();
+	/** Transfers done with the result of one search (each one revalidated). */
+	private static final int TRANSFERS_PER_SEARCH = 32;
 
 	public enum Outcome {
-		/** One level was moved. */
+		/** At least one level was moved. */
 		MOVED,
-		/** Balanced (or nothing to do): the trigger can be dropped. */
+		/** The whole body was explored and is balanced: the trigger can be dropped. */
 		BALANCED,
-		/** Could not run because of saturated blocks: retry later. */
+		/** Saturated paths or incomplete search (body larger than the limit): retry later. */
 		BLOCKED
 	}
 
@@ -70,169 +79,286 @@ public final class PressureSearch {
 		return true;
 	}
 
-	/** A found target: its position, height and the full block of the body it was reached from. */
-	private record Target(BlockPos pos, int height, BlockPos via) {
+	// ------------------------------------------------------------------ columns
+
+	/** A vertical run of full, non-falling blocks of the fluid. */
+	private record Column(int x, int z, int yBot, int yTop) {
+		long key() {
+			return BlockPos.asLong(x, yBot, z);
+		}
+
+		int capacity() {
+			return yTop - yBot + 1;
+		}
+
+		BlockPos top() {
+			return new BlockPos(x, yTop, z);
+		}
 	}
 
-	/** Search result: best target, parents of the visited full blocks, and whether saturation blocked the way. */
-	private record Search(Target target, Long2LongOpenHashMap parents, boolean hitSaturated, LongOpenHashSet seen) {
+	private static Column columnAt(ServerLevel world, FlowingFluid fluid, BlockPos p) {
+		BlockPos.MutableBlockPos m = p.mutable();
+		int yBot = p.getY(), yTop = p.getY();
+		BlockPos cur = p;
+		while (true) {
+			BlockPos below = cur.below();
+			if (!world.isLoaded(below) || !isStillFull(world.getFluidState(below), fluid) || FluidUtils.isPathBlocked(world, cur, below)) break;
+			cur = below;
+			yBot--;
+		}
+		cur = p;
+		while (true) {
+			BlockPos above = cur.above();
+			if (!world.isLoaded(above) || !isStillFull(world.getFluidState(above), fluid) || FluidUtils.isPathBlocked(world, cur, above)) break;
+			cur = above;
+			yTop++;
+		}
+		return new Column(m.getX(), m.getZ(), yBot, yTop);
+	}
+
+	/** A surface or a free point, with the column it was reached from. */
+	private static final class Target {
+		final BlockPos pos;
+		int height;
+		final long via;
+
+		Target(BlockPos pos, int height, long via) {
+			this.pos = pos;
+			this.height = height;
+			this.via = via;
+		}
+	}
+
+	private record Search(List<Target> highs, List<Target> lows, Long2LongOpenHashMap parents,
+	                      Long2ObjectOpenHashMap<Column> columns, boolean complete, boolean hitSaturated) {
 	}
 
 	/**
-	 * Best-first search from {@code start} through the full, non-falling blocks of {@code fluid}.
-	 * The search never stops at the first target found: it keeps the best one within the limit.
+	 * Breadth-first search of the body of fluid containing the full block {@code start}, by columns.
 	 *
-	 * @param upward true: find the highest free surface; false: find the lowest free point
+	 * @param usage levels already carried this tick by each column (key); full columns are not crossed
+	 * @param limit max number of columns
 	 */
-	private static Search search(ServerLevel world, FlowingFluid fluid, BlockPos start, boolean upward,
-	                             LongOpenHashSet saturated, int limit) {
-		Long2LongOpenHashMap parents = new Long2LongOpenHashMap(64, .5f);
-		LongOpenHashSet seen = new LongOpenHashSet(64, .5f);
-		PriorityQueue<BlockPos> queue = upward
-				? new PriorityQueue<>((a, b) -> Integer.compare(b.getY(), a.getY()))
-				: new PriorityQueue<>((a, b) -> Integer.compare(a.getY(), b.getY()));
-		seen.add(start.asLong());
-		parents.put(start.asLong(), start.asLong());
-		queue.add(start);
+	private static Search search(ServerLevel world, FlowingFluid fluid, BlockPos start, Long2IntOpenHashMap usage, int limit) {
+		List<Target> highs = new ArrayList<>();
+		List<Target> lows = new ArrayList<>();
+		Long2LongOpenHashMap parents = new Long2LongOpenHashMap();
+		Long2ObjectOpenHashMap<Column> columns = new Long2ObjectOpenHashMap<>();
+		LongOpenHashSet candidates = new LongOpenHashSet();
+		ArrayDeque<Column> queue = new ArrayDeque<>();
+		Column first = columnAt(world, fluid, start);
+		columns.put(first.key(), first);
+		parents.put(first.key(), first.key());
+		queue.add(first);
 		boolean hitSaturated = false;
-		Target best = null;
-		int ties = 0;
-		int searched = 0;
-		BlockPos p;
-		while ((p = queue.poll()) != null && searched < limit) {
-			searched++;
-			if (upward && !world.getFluidState(p.above()).getType().isSame(fluid)) {
-				// A full block whose top is not the fluid is a free surface.
-				Target candidate = new Target(p, height(p, MAX), p);
-				if (best == null || candidate.height() > best.height()) {
-					best = candidate;
-					ties = 1;
-				} else if (candidate.height() == best.height() && world.getRandom().nextInt(++ties) == 0) {
-					best = candidate;
+		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+		Column c;
+		while ((c = queue.poll()) != null) {
+			long key = c.key();
+			// --- top: free surface and free point above the column
+			BlockPos top = c.top();
+			BlockPos above = top.above();
+			if (world.isLoaded(above) && !FluidUtils.isPathBlocked(world, top, above)) {
+				FluidState afs = world.getFluidState(above);
+				if (afs.getType().isSame(fluid)) {
+					if (!isFalling(afs) && afs.getAmount() < MAX && candidates.add(above.asLong())) {
+						Target t = new Target(above.immutable(), height(above, afs.getAmount()), key);
+						highs.add(t);
+						lows.add(new Target(t.pos, t.height, key));
+					}
+				} else if (afs.isEmpty() && world.getBlockState(above).canBeReplaced(fluid)) {
+					highs.add(new Target(top, height(top, MAX), key));
+					if (canPressureFill(world, above) && candidates.add(above.asLong())) lows.add(new Target(above.immutable(), height(above, 0), key));
 				}
 			}
-			for (Direction dir : ALL_DIRS) {
-				BlockPos q = p.relative(dir);
-				long ql = q.asLong();
-				if (seen.contains(ql)) continue;
-				if (FluidUtils.isPathBlocked(world, p, q)) continue;
-				FluidState qFs = world.getFluidState(q);
-				Target candidate = null;
-				if (qFs.getType().isSame(fluid)) {
-					if (isFalling(qFs)) continue;
-					int lvl = qFs.getAmount();
-					seen.add(ql);
-					if (lvl == MAX) {
-						if (saturated.contains(ql)) {
-							hitSaturated = true;
-							continue;
-						}
-						parents.put(ql, p.asLong());
-						queue.add(q);
+			// --- bottom: a non-full block of the fluid under the column is a free point
+			BlockPos bottom = new BlockPos(c.x(), c.yBot(), c.z());
+			BlockPos below = bottom.below();
+			if (world.isLoaded(below) && !FluidUtils.isPathBlocked(world, bottom, below)) {
+				FluidState bfs = world.getFluidState(below);
+				if (bfs.getType().isSame(fluid) && !isFalling(bfs) && bfs.getAmount() < MAX && candidates.add(below.asLong())) {
+					lows.add(new Target(below.immutable(), height(below, bfs.getAmount()), key));
+				}
+			}
+			// --- sides: neighbouring columns, non-full blocks, empty cells (lowest one per side)
+			for (Direction d : HORIZONTAL) {
+				boolean emptyFound = false;
+				int y = c.yBot();
+				while (y <= c.yTop()) {
+					p.set(c.x(), y, c.z());
+					BlockPos from = p.immutable();
+					BlockPos q = from.relative(d);
+					if (!world.isLoaded(q) || FluidUtils.isPathBlocked(world, from, q)) {
+						y++;
 						continue;
 					}
-					candidate = new Target(q, height(q, lvl), p);
-				} else if (!upward && dir != Direction.DOWN && qFs.isEmpty()) {
-					BlockState qState = world.getBlockState(q);
-					if (qState.canBeReplaced(fluid) && canPressureFill(world, q)) {
-						seen.add(ql);
-						candidate = new Target(q, height(q, 0), p);
+					FluidState qfs = world.getFluidState(q);
+					if (isStillFull(qfs, fluid)) {
+						Column n = columnAt(world, fluid, q);
+						long nk = n.key();
+						if (!columns.containsKey(nk)) {
+							if (usage.get(nk) >= n.capacity()) {
+								hitSaturated = true;
+							} else if (columns.size() >= limit) {
+								return new Search(highs, lows, parents, columns, false, hitSaturated);
+							} else {
+								columns.put(nk, n);
+								parents.put(nk, key);
+								queue.add(n);
+							}
+						}
+						y = Math.max(y, n.yTop()) + 1;
+						continue;
 					}
-				}
-				if (candidate == null) continue;
-				boolean better = best == null
-						|| (upward ? candidate.height() > best.height() : candidate.height() < best.height());
-				if (better) {
-					best = candidate;
-					ties = 1;
-				} else if (candidate.height() == best.height() && world.getRandom().nextInt(++ties) == 0) {
-					best = candidate;
+					if (qfs.getType().isSame(fluid)) {
+						if (!isFalling(qfs) && candidates.add(q.asLong())) {
+							Target t = new Target(q, height(q, qfs.getAmount()), key);
+							highs.add(t);
+							lows.add(new Target(q, t.height, key));
+						}
+					} else if (!emptyFound && qfs.isEmpty() && world.getBlockState(q).canBeReplaced(fluid) && canPressureFill(world, q)) {
+						emptyFound = true;
+						if (candidates.add(q.asLong())) lows.add(new Target(q, height(q, 0), key));
+					}
+					y++;
 				}
 			}
 		}
-		return new Search(best, parents, hitSaturated, seen);
+		return new Search(highs, lows, parents, columns, true, hitSaturated);
 	}
 
-	/** Debug: heights (y * 8 + level) of the highest free surface and the lowest free point of a body of fluid. */
-	public record Inspection(int highHeight, int lowHeight) {
+	/** Column keys from {@code via} up to the start column. */
+	private static LongArrayList path(Long2LongOpenHashMap parents, long via) {
+		LongArrayList out = new LongArrayList();
+		long k = via;
+		for (int guard = 0; guard <= parents.size(); guard++) {
+			out.add(k);
+			long parent = parents.getOrDefault(k, k);
+			if (parent == k) break;
+			k = parent;
+		}
+		return out;
 	}
 
-	/**
-	 * Debug (no transfer): highest free surface and lowest free point of the body of fluid at {@code pos}
-	 * (lowHeight = Integer.MIN_VALUE when there is none). A non-full block with no full block under it is alone.
-	 */
+	/** Key of the column of full blocks containing {@code pos} (its bottom block), or 0 if {@code pos} is not full. */
+	public static long columnKey(ServerLevel world, FlowingFluid fluid, BlockPos pos) {
+		if (!isStillFull(world.getFluidState(pos), fluid)) return 0L;
+		return columnAt(world, fluid, pos).key();
+	}
+
+	// ------------------------------------------------------------------ inspection (debug, tests)
+
+	/** Result of an inspection: heights (y * 8 + level), Integer.MIN_VALUE when none; size in columns. */
+	public record Inspection(int highHeight, int lowHeight, int columns, boolean complete) {
+		public boolean balanced() {
+			return complete && (lowHeight == Integer.MIN_VALUE || highHeight - lowHeight < 2);
+		}
+	}
+
+	/** Inspects the body of fluid at {@code pos} without moving anything. */
 	public static Inspection inspect(ServerLevel world, BlockPos pos, int limit) {
 		FluidState fs = world.getFluidState(pos);
-		if (fs.isEmpty() || !(fs.getType() instanceof FlowingFluid fluid)) return new Inspection(Integer.MIN_VALUE, Integer.MIN_VALUE);
+		if (fs.isEmpty() || !(fs.getType() instanceof FlowingFluid fluid)) return new Inspection(Integer.MIN_VALUE, Integer.MIN_VALUE, 0, true);
 		BlockPos start = null;
 		if (isStillFull(fs, fluid)) start = pos;
 		else if (isStillFull(world.getFluidState(pos.below()), fluid)) start = pos.below();
-		if (start == null) return new Inspection(height(pos, fs.getAmount()), Integer.MIN_VALUE);
-		LongOpenHashSet none = new LongOpenHashSet();
-		Search up = search(world, fluid, start, true, none, limit);
-		Search down = search(world, fluid, start, false, none, limit);
-		int high = up.target() == null ? height(start, MAX) : up.target().height();
-		int low = down.target() == null ? Integer.MIN_VALUE : down.target().height();
-		return new Inspection(high, low);
+		if (start == null) return new Inspection(height(pos, fs.getAmount()), Integer.MIN_VALUE, 0, true);
+		Search s = search(world, fluid, start, new Long2IntOpenHashMap(), limit);
+		int high = s.highs().stream().mapToInt(t -> t.height).max().orElse(Integer.MIN_VALUE);
+		int low = s.lows().stream().mapToInt(t -> t.height).min().orElse(Integer.MIN_VALUE);
+		return new Inspection(high, low, s.columns().size(), s.complete());
 	}
+
+	// ------------------------------------------------------------------ step
 
 	/**
-	 * One pressure step for the body of fluid that contains the full block {@code trigger}.
+	 * Pressure step for the body of fluid that contains the full block {@code trigger}: one search, then up to
+	 * {@link #TRANSFERS_PER_SEARCH} one-level transfers from the highest surfaces to the lowest free points,
+	 * each one revalidated against the world.
 	 *
-	 * @param saturated full blocks that already carried their capacity this tick (updated by this call)
-	 * @param lowSide   receives the full block next to the low point when a level was moved (next trigger)
-	 * @param balanced  receives the blocks visited when the body is found balanced (they need no other step soon)
+	 * @param usage    levels carried this tick by each column (updated)
+	 * @param lowSide  receives a block next to the last filled low point (next trigger)
+	 * @param balanced receives the cells of a body found completely balanced
+	 * @param searched receives the keys of the columns explored (one search per body and per tick)
 	 */
-	public static Outcome step(ServerLevel world, FlowingFluid fluid, BlockPos trigger, LongOpenHashSet saturated,
-	                           int limit, BlockPos.MutableBlockPos lowSide, LongOpenHashSet balanced) {
+	public static Outcome step(ServerLevel world, FlowingFluid fluid, BlockPos trigger, Long2IntOpenHashMap usage,
+	                           int limit, BlockPos.MutableBlockPos lowSide, LongOpenHashSet balanced, LongOpenHashSet searched) {
 		if (limit <= 0) return Outcome.BALANCED;
 		if (!isStillFull(world.getFluidState(trigger), fluid)) return Outcome.BALANCED;
-		if (saturated.contains(trigger.asLong())) return Outcome.BLOCKED;
-
-		// Low point first: when there is none, the surface search is not needed.
-		Search down = search(world, fluid, trigger, false, saturated, limit);
-		Target low = down.target();
-		if (low == null) {
-			if (down.hitSaturated()) return Outcome.BLOCKED;
-			balanced.addAll(down.seen());
-			return Outcome.BALANCED;
+		Search s = search(world, fluid, trigger, usage, limit);
+		searched.addAll(s.columns().keySet());
+		PriorityQueue<Target> highs = new PriorityQueue<>(Comparator.comparingInt((Target t) -> -t.height));
+		PriorityQueue<Target> lows = new PriorityQueue<>(Comparator.comparingInt((Target t) -> t.height));
+		highs.addAll(s.highs());
+		lows.addAll(s.lows());
+		boolean saturated = s.hitSaturated();
+		int moved = 0;
+		List<BlockPos> touched = new ArrayList<>();
+		while (moved < TRANSFERS_PER_SEARCH && !highs.isEmpty() && !lows.isEmpty()) {
+			Target hi = highs.peek(), lo = lows.peek();
+			if (hi.height - lo.height < 2) break;
+			if (hi.pos.equals(lo.pos)) {
+				lows.poll();
+				continue;
+			}
+			// revalidate both ends against the world
+			FluidState hfs = world.getFluidState(hi.pos);
+			if (!hfs.getType().isSame(fluid) || hfs.getAmount() == 0 || height(hi.pos, hfs.getAmount()) != hi.height) {
+				highs.poll();
+				continue;
+			}
+			FluidState lfs = world.getFluidState(lo.pos);
+			int lowLevel = lfs.getType().isSame(fluid) ? lfs.getAmount() : 0;
+			if (lowLevel >= MAX || (lowLevel == 0 && !lfs.isEmpty()) || height(lo.pos, lowLevel) != lo.height) {
+				lows.poll();
+				continue;
+			}
+			// capacity of the columns on both paths
+			LongArrayList pathHi = path(s.parents(), hi.via), pathLo = path(s.parents(), lo.via);
+			LongOpenHashSet cols = new LongOpenHashSet(pathHi);
+			cols.addAll(pathLo);
+			boolean free = true;
+			for (long k : cols) {
+				Column col = s.columns().get(k);
+				if (col != null && usage.get(k) >= col.capacity()) {
+					free = false;
+					break;
+				}
+			}
+			if (!free) {
+				saturated = true;
+				break;
+			}
+			// strict conservation: one level from the surface to the low point
+			FluidUtils.setFluid(world, hi.pos, fluid, hfs.getAmount() - 1, false);
+			FluidUtils.setFluid(world, lo.pos, fluid, lowLevel + 1, false);
+			for (long k : cols) usage.addTo(k, 1);
+			touched.add(hi.pos);
+			touched.add(lo.pos);
+			moved++;
+			highs.poll();
+			lows.poll();
+			if (hfs.getAmount() - 1 > 0) {
+				hi.height--;
+				highs.add(hi);
+			}
+			if (lowLevel + 1 < MAX) {
+				lo.height++;
+				lows.add(lo);
+			}
+			Column via = s.columns().get(lo.via);
+			if (via != null) lowSide.set(via.top());
 		}
-		Search up = search(world, fluid, trigger, true, saturated, limit);
-		Target high = up.target();
-		if (high == null || high.height() - low.height() < 2 || high.pos().equals(low.pos())) {
-			if (up.hitSaturated() || down.hitSaturated()) return Outcome.BLOCKED;
-			balanced.addAll(down.seen());
-			balanced.addAll(up.seen());
-			return Outcome.BALANCED;
+		if (moved > 0) {
+			for (BlockPos t : touched) wakeAround(world, fluid, t);
+			return Outcome.MOVED;
 		}
-
-		// Strict conservation: one level taken at the surface, one level added at the low point.
-		FluidState highFs = world.getFluidState(high.pos());
-		FluidState lowFs = world.getFluidState(low.pos());
-		if (!highFs.getType().isSame(fluid) || highFs.getAmount() == 0) return Outcome.BLOCKED;
-		int lowLevel = lowFs.getType().isSame(fluid) ? lowFs.getAmount() : 0;
-		if (lowLevel >= MAX || (lowLevel == 0 && !lowFs.isEmpty())) return Outcome.BLOCKED;
-		FluidUtils.setFluid(world, high.pos(), fluid, highFs.getAmount() - 1, false);
-		FluidUtils.setFluid(world, low.pos(), fluid, lowLevel + 1, false);
-
-		// Reserve the capacity of both paths (trigger -> surface, trigger -> low point).
-		reserve(up.parents(), high.via(), saturated);
-		reserve(down.parents(), low.via(), saturated);
-
-		wakeAround(world, fluid, high.pos());
-		wakeAround(world, fluid, low.pos());
-		lowSide.set(low.via());
-		return Outcome.MOVED;
-	}
-
-	private static void reserve(Long2LongOpenHashMap parents, BlockPos from, LongOpenHashSet saturated) {
-		long p = from.asLong();
-		for (int guard = 0; guard <= parents.size(); guard++) {
-			saturated.add(p); // CAPACITY_PER_TICK = 1: one transfer saturates the block for this tick
-			long parent = parents.getOrDefault(p, p);
-			if (parent == p) break;
-			p = parent;
+		if (saturated || !s.complete()) return Outcome.BLOCKED;
+		// completely explored and balanced: its cells need no other step for a while
+		for (Column col : s.columns().values()) {
+			for (int y = col.yBot(); y <= col.yTop(); y++) balanced.add(BlockPos.asLong(col.x(), y, col.z()));
 		}
+		return Outcome.BALANCED;
 	}
 
 	private static void wakeAround(ServerLevel world, FlowingFluid fluid, BlockPos center) {

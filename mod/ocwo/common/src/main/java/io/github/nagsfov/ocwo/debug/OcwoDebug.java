@@ -128,10 +128,10 @@ public final class OcwoDebug {
 		double depth = Math.max(0, in.highHeight() - eyeLevels);
 		out.add(String.format(Locale.ROOT, "§bpression : %.2f blocs (%.0f niveaux) sous la surface y=%.2f",
 				depth / FluidUtils.MAX_LEVEL, depth, in.highHeight() / (double) FluidUtils.MAX_LEVEL));
-		if (in.lowHeight() == Integer.MIN_VALUE) out.add("§7masse : pas de point libre trouvé");
-		else if (in.highHeight() - in.lowHeight() >= 2) out.add(String.format(Locale.ROOT,
-				"§6masse : transferts en attente (point bas y=%.2f)", in.lowHeight() / (double) FluidUtils.MAX_LEVEL));
-		else out.add("§amasse : équilibrée");
+		if (!in.complete()) out.add(String.format(Locale.ROOT, "§7masse : plus de %d colonnes, analyse incomplète (reprise plus tard)", in.columns()));
+		else if (in.balanced()) out.add(String.format(Locale.ROOT, "§amasse : équilibrée (%d colonnes)", in.columns()));
+		else out.add(String.format(Locale.ROOT, "§6masse : transferts en attente, point bas y=%.2f (%d colonnes)",
+				in.lowHeight() / (double) FluidUtils.MAX_LEVEL, in.columns()));
 	}
 
 	private static void lookedAt(ServerLevel level, ServerPlayer player, List<String> out) {

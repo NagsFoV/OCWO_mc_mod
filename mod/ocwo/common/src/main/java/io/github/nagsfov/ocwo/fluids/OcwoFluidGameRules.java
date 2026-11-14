@@ -25,9 +25,9 @@ public class OcwoFluidGameRules {
 	public static final GameRule<Boolean> BUCKET_AREA_PICKUP = enabled()
 			? Services.PLATFORM.registerBooleanRule("bucket_area_pickup", true) : null;
 
-	/** Max number of full fluid blocks searched by the pressure system (0 = pressure disabled). See 06-pression.md. */
+	/** Max number of columns of fluid explored by one pressure search (0 = pressure disabled). See 06-pression.md. */
 	public static final GameRule<Integer> PRESSURE_SEARCH_LIMIT = enabled()
-			? Services.PLATFORM.registerIntRule("pressure_search_limit", 256, 0, 65_536) : null;
+			? Services.PLATFORM.registerIntRule("pressure_search_limit", 1024, 0, 65_536) : null;
 
 	/** Block moisture simulation (03-humidite-et-etats-des-blocs.md). */
 	public static final GameRule<Boolean> MOISTURE_SIMULATION = enabled()
