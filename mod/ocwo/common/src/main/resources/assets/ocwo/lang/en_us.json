@@ -1,6 +1,6 @@
 {
 	"gamerule.ocwo.task_limit": "Fluid tasks limit",
-	"gamerule.ocwo.task_limit.description": "Limit for fluid update tasks",
+	"gamerule.ocwo.task_limit.description": "Number of fluid flow tasks done every tick (the tick waits for them). Lower it if the game lags",
 	"gamerule.ocwo.dripstone_fill_cauldron": "Dripstone fill cauldron",
 	"gamerule.ocwo.dripstone_fill_cauldron.description": "Will dripstone fill cauldrons",
 	"gamerule.ocwo.fluid_displacement_limit": "Fluid displacement limit",
@@ -11,6 +11,14 @@
 	"gamerule.ocwo.farmland_water_intake.description": "Farmland consumes water, farmland also need to be connected with dirt-like block with water (0 = no consumption, -1 = vanilla behavior)",
 	"gamerule.ocwo.bucket_area_pickup": "Bucket picks up water around",
 	"gamerule.ocwo.bucket_area_pickup.description": "true (AREA): a bucket used on a block that is not full also takes water from the connected blocks around it on the same layer (up to 16 blocks, 4 blocks away), until full. false (COLUMN): only the targeted block and the block below it (PhysEx behaviour)",
+	"gamerule.ocwo.pressure_operations_per_tick": "Water pressure operations per tick",
+	"gamerule.ocwo.pressure_operations_per_tick.description": "Work done by water pressure every tick: each block of water explored by a search counts 1, each level of water moved counts 1. The tick waits until it is done, so water behaves the same on every computer; lower it if the game lags (water under pressure then moves more slowly)",
+	"gamerule.ocwo.pressure_flow_max": "Water pressure max speed-up",
+	"gamerule.ocwo.pressure_flow_max.description": "Water under pressure flows faster when the difference of height is larger (square root: 1 block x1, 4 blocks x2, 9 blocks x3, 16 blocks x4). This is the maximum speed-up, in levels per tick and per block of opening. 1 = no speed-up",
+	"gamerule.ocwo.water_simulation_scale": "Water simulation scale (%)",
+	"gamerule.ocwo.water_simulation_scale.description": "Percentage applied to all the work quotas of the water simulation (flow, pressure, moisture). 100 = normal. Lower it if the game lags: water moves more slowly but the game keeps up",
+	"gamerule.ocwo.water_time_budget_ms": "Water time budget (ms)",
+	"gamerule.ocwo.water_time_budget_ms.description": "Optional: maximum time per tick for water pressure, equalization and moisture, in milliseconds. 0 = off (recommended): every tick finishes its work and the game slows down instead of the water. Above 0, water depends on the speed of the computer",
 	"gamerule.ocwo.pressure_search_limit": "Water pressure search limit",
 	"gamerule.ocwo.pressure_search_limit.description": "Max number of columns of water explored to find the highest surface and the lowest free point of a body of water (hydraulic pressure: tunnels fill completely, connected vessels reach the same level, fountains). 0 = pressure disabled",
 	"tooltip.ocwo.bucket_content": "%s: %sB"

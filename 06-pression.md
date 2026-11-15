@@ -1,6 +1,62 @@
 # 06. Pression de l'eau
 
-**Statut : modèle validé par Valentin le 12/11/2026. Version 3 de l'algorithme le 14/11/2026 (branche `pression-v3`), à tester en jeu.** Code : `PressureSearch` (recherches et transfert), déclenchement dans `ClassicFlowTask.pressure`, file de pression et vérification lente dans `CustomFluidTicks`.
+**Statut : modèle validé par Valentin le 12/11/2026. Version 3 de l'algorithme le 14/11/2026, quotas déterministes et accélération le 15/11/2026 (branche `pression-v3`), à tester en jeu.** Code : `PressureSearch` (recherches et transfert), déclenchement dans `ClassicFlowTask.pressure`, file de pression et vérification lente dans `CustomFluidTicks`.
+
+## Quotas déterministes et accélération (15/11/2026)
+
+**Décision de Valentin (14/11/2026)** : la simulation est prioritaire. Le jeu n'avance pas tant que le travail d'eau du tick n'est pas fait ; si ça rame, on réduit l'ampleur de la simulation (comme la redstone ou les ticks programmés de Minecraft). **Le TPS baisse plutôt que l'eau.**
+
+**Quotas fixes par tick, plus aucune coupure en millisecondes** :
+- Pression : `ocwo:pressure_operations_per_tick` (2 048 par défaut). Un élément pris dans la file compte 1, chaque bloc d'eau parcouru par une recherche compte 1, chaque niveau déplacé compte 1. La file est traitée dans l'ordre (premier arrivé, premier servi), et ce qui dépasse passe au tick suivant dans le même ordre.
+- Écoulement : `ocwo:task_limit` (existant, 10 000 tâches par tick ; l'égalisation en fait 1 %).
+- Humidité : `ocwo:moisture_blocks_per_step` (voir 03).
+- Échelle globale : `ocwo:water_simulation_scale` en pourcentage (100 par défaut) multiplie tous ces quotas.
+- Facultatif : `ocwo:water_time_budget_ms` (0 = désactivé par défaut) remet une limite en millisecondes pour les serveurs qui préfèrent ralentir l'eau plutôt que le jeu (pression, égalisation, humidité).
+- Si le travail d'eau d'un tick dépasse 1 seconde, un avertissement est écrit dans le journal, avec le nombre d'opérations faites. Le tick n'est jamais interrompu.
+- L'aléatoire de la simulation (directions de l'écoulement, vérification lente autour des joueurs) vient d'une source tirée de la graine du monde, et non plus d'une source au hasard à chaque lancement.
+
+**Équité entre masses d'eau** (bug trouvé en passant aux quotas) : une grande masse d'eau qui reçoit de l'eau en continu (un lac qu'on remplit) relançait une recherche à chaque tick et prenait tout le quota, si bien que les autres masses ne bougeaient plus. Désormais :
+- chaque masse d'eau a droit à une seule recherche par tick ;
+- un déclencheur venu d'une eau qui a bougé est abandonné si une recherche de sa masse a eu lieu après lui (elle en a déjà tenu compte) ;
+- seul le déclencheur qui poursuit le travail d'une masse (eau déplacée : tick suivant ; bloquée : plus tard) est gardé.
+
+Les masses passent donc chacune à leur tour.
+
+**Accélération par la pression** (plafond choisi par Valentin : 4) : une ouverture laisse passer, par tick et par bloc d'ouverture, autant de niveaux que la racine carrée de la différence de hauteur en blocs (1 bloc ×1, 4 blocs ×2, 9 ×3, 16 et plus ×4). Le plafond est réglable par la règle de jeu `ocwo:pressure_flow_max` (4 par défaut, 1 = pas d'accélération). Chaque transfert déplace toujours un seul niveau, et seulement si la différence est d'au moins 2 : l'eau ne peut pas dépasser l'équilibre ni faire de va-et-vient. Une recherche peut faire jusqu'à 32 × plafond transferts, et chaque niveau compte dans le quota. Cela concerne la pression seulement, sans effet visible pour l'instant.
+
+**Tests de vases** (19 cas : les 16 de la v3, plus « grande différence avec accélération », « petite différence » et la loi d'accélération ; contrôle anti-oscillation ajouté sur tous les cas sans versement) :
+
+| Cas | v3 (budget 3 ms) | Quotas, sans accélération | Quotas + accélération ×4 |
+|---|---|---|---|
+| 1×1, h10 | 40 | 40 | 40 |
+| 1×1, h40 | 160 | 160 | 80 |
+| 3×3, h10 | 290 | 280 | 230 à 440 |
+| 3×3, h20 | 630 | 650 | 350 |
+| 3×3, h40 | 1 360 | 1 360 | 530 |
+| 5×5, h20 | 1 750 | 1 770 | 940 à 980 |
+| 5×5, h40 | 3 780 | 3 760 | 1 470 |
+| 9×9, h20 | 5 850 | 5 770 | 3 200 à 3 410 |
+| 12×12, h20 | 10 130 | 10 280 | 5 720 à 5 760 |
+| 5×5, tunnel 1×2 / 2×2 / 3×3 | 950 / 630 / 380 | 960 / 660 / 380 | 500 / 350 / 210 |
+| 5×5, tunnel long de 1 / 20 | 1 690 / 1 850 | 1 720 / 1 850 | 930 / 1 000 à 1 040 |
+| 3×3 et 9×9 remplis progressivement | 740 / 5 920 | 1 030 / 5 920 | 750 / 5 920 |
+| Petite différence (5×5, 6 et 4 blocs) | - | 200 | 200 (inchangé) |
+
+Toutes les réussites gardent l'eau exacte au niveau près. Les vases remplis progressivement sont limités par la vitesse de versement du test.
+
+**Reproductibilité** : deux lancements du même test donnent le même résultat à 10 ou 20 ticks près (3×3 h10 seul : 220 puis 230 ; 9×9 seul : 3 230 puis 3 210). Le reste de l'écart vient de l'outil de test, qui place chaque test à des coordonnées tirées au hasard (bords de chunks différents), et qui fait tourner plusieurs tests en même temps dans le même monde : ils se partagent alors le quota. La graine du monde de test est fixe (0). Dans un monde donné, à la même position, plus rien ne dépend de la vitesse du PC. L'égalité au tick près n'a pas pu être vérifiée, faute de pouvoir fixer la position des tests.
+
+**Performance** (lac 32×32×8 vidé, lancé seul ; cibles 10 ms en moyenne et 50 ms au pire tick) :
+
+| | Moyenne | Dont pression | Pire tick |
+|---|---|---|---|
+| Avant (v3, budget 3 ms) | 6,2 ms | 3,7 ms | 47 ms |
+| Quotas + accélération, 3 lancements | 5,9 à 6,6 ms | 3,2 à 3,7 ms | 49 à 61 ms |
+| PhysEx seul, pour comparer | 2,6 à 2,9 ms | - | 12 à 78 ms |
+
+La moyenne est inchangée. Le pire tick est à la limite des 50 ms ; il varie beaucoup d'un lancement à l'autre, même avec PhysEx seul. Lac 64×64×16 : 26,9 ms (dont 5,0 de pression), contre 22 à 28 ms pour PhysEx seul.
+
+Le lot de performance complet lance les lacs l'un après l'autre dans le même monde, dans un ordre qui change : un lac encore en train de se vider fausse la mesure du suivant. Il faut lancer chaque lac seul : `gradlew.bat :fabric:runGameTestPerf "-Docwo.perf=-Dfabric-api.gametest.filter=ocwo-gametest:performance_game_tests_mid_lake"`.
 
 ## Version 3 : recherche par colonnes (14/11/2026)
 

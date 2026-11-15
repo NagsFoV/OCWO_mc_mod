@@ -29,6 +29,25 @@ public class OcwoFluidGameRules {
 	public static final GameRule<Integer> PRESSURE_SEARCH_LIMIT = enabled()
 			? Services.PLATFORM.registerIntRule("pressure_search_limit", 1024, 0, 65_536) : null;
 
+	/**
+	 * Pressure operations per tick: a search costs 1 per block of water it explores, each level moved costs 1. Fixed quota: the tick waits for it
+	 * (see 06-pression.md). Multiplied by {@link #SIMULATION_SCALE}.
+	 */
+	public static final GameRule<Integer> PRESSURE_OPERATIONS_PER_TICK = enabled()
+			? Services.PLATFORM.registerIntRule("pressure_operations_per_tick", 2048, 1, 10_000_000) : null;
+
+	/** Max speed-up of pressure flow (levels per tick and per block of opening); 1 = no speed-up. */
+	public static final GameRule<Integer> PRESSURE_FLOW_MAX = enabled()
+			? Services.PLATFORM.registerIntRule("pressure_flow_max", 4, 1, 16) : null;
+
+	/** Percentage applied to every quota of the water simulation (flow tasks, pressure, moisture). */
+	public static final GameRule<Integer> SIMULATION_SCALE = enabled()
+			? Services.PLATFORM.registerIntRule("water_simulation_scale", 100, 1, 1000) : null;
+
+	/** Optional time cap of the water simulation per tick, in ms (0 = off: the tick always finishes its quotas). */
+	public static final GameRule<Integer> WATER_TIME_BUDGET_MS = enabled()
+			? Services.PLATFORM.registerIntRule("water_time_budget_ms", 0, 0, 1000) : null;
+
 	private static boolean enabled() {
 		return OcwoBootConfig.INSTANCE.isFluidPhysicsEnabled();
 	}
