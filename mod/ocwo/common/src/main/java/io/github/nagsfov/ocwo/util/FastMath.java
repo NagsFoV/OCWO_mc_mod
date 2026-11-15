@@ -1,11 +1,15 @@
 package io.github.nagsfov.ocwo.util;
 
-import java.util.Random;
+import net.minecraft.util.RandomSource;
 
 /** The few math helpers PhysEx used from skdslib. */
 public final class FastMath {
 
-	public static final Random RANDOM = new Random();
+	/**
+	 * Random of the fluid simulation. Seeded from the world seed when the overworld starts ticking (see
+	 * CustomFluidTicks), so the same world and the same actions give the same water.
+	 */
+	public static final RandomSource RANDOM = RandomSource.createThreadSafe();
 
 	private FastMath() {
 	}

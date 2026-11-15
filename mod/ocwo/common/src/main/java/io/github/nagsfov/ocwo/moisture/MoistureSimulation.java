@@ -20,7 +20,8 @@ import net.minecraft.world.level.material.Fluids;
 /**
  * OCWO block moisture simulation for one level (see 03-humidite-et-etats-des-blocs.md).
  * <p>
- * Slow: runs every {@link #PERIOD} ticks, only on "active" blocks, within a time budget. One step of a block:
+ * Slow: runs every {@link #PERIOD} ticks, only on "active" blocks, a fixed number of them per step (game rule
+ * {@code moisture_blocks_per_step}, in queue order: deterministic, the tick waits for it). One step of a block:
  * <ol>
  *   <li>absorption: takes one water level from a neighbouring water block (if not full);</li>
  *   <li>transmission: shares moisture with porous neighbours, by fill ratio and permeability, biased downwards;</li>
@@ -33,7 +34,6 @@ import net.minecraft.world.level.material.Fluids;
 public final class MoistureSimulation {
 
 	public static final int PERIOD = 10;
-	private static final long TIME_BUDGET_NANOS = 2_000_000L;
 	private static final int SAMPLE_PERIOD = 20;
 	private static final int SAMPLES_PER_PLAYER = 32;
 	private static final int SAMPLE_RADIUS = 24;
@@ -147,10 +147,10 @@ public final class MoistureSimulation {
 		if (time % SAMPLE_PERIOD == 0) sample();
 		if (time % PERIOD != 0 || active.isEmpty()) return;
 		long start = System.nanoTime();
-		long deadline = start + TIME_BUDGET_NANOS;
-		int count = active.size();
+		io.github.nagsfov.ocwo.fluids.CustomFluidTicks ticks = io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level);
+		int count = Math.min(active.size(), ticks.scaled(level.getGameRules().get(OcwoFluidGameRules.MOISTURE_BLOCKS_PER_STEP)));
 		BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-		for (int i = 0; i < count && !active.isEmpty() && System.nanoTime() < deadline; i++) {
+		for (int i = 0; i < count && !active.isEmpty() && !ticks.outOfTime(); i++) {
 			long p = active.removeFirstLong();
 			pos.set(BlockPos.getX(p), BlockPos.getY(p), BlockPos.getZ(p));
 			if (!level.isLoaded(pos)) continue;
@@ -161,7 +161,7 @@ public final class MoistureSimulation {
 
 	/** Finds blocks that should be simulated near players (still water against porous blocks, rain test). */
 	private void sample() {
-		RandomSource random = level.getRandom();
+		RandomSource random = io.github.nagsfov.ocwo.util.FastMath.RANDOM;
 		boolean rain = OcwoFluidGameRules.RAIN_MOISTURE_TEST != null && level.getGameRules().get(OcwoFluidGameRules.RAIN_MOISTURE_TEST)
 				&& level.isRaining();
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
@@ -222,7 +222,7 @@ public final class MoistureSimulation {
 			// The block can no longer hold moisture (mined, replaced): release it as water here or next to it.
 			return h > 0 && release(pos, h);
 		}
-		RandomSource random = level.getRandom();
+		RandomSource random = io.github.nagsfov.ocwo.util.FastMath.RANDOM;
 		int cap = props.capacity();
 		if (props.fixedWater() > 0 && h < props.fixedWater()) {
 			// A block made of water with less moisture than its fixed water can only come from world generation

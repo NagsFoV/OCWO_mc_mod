@@ -163,7 +163,7 @@ Trois cas, vérifiés dans le code actuel :
 
 **Stockage** (`MoistureLayer`) : l'humidité de chaque bloc, par section de chunk (tableau créé seulement si la section en contient), en **unités entières : 1 niveau d'eau = 16 unités**, pour une conservation exacte. Sauvegardée avec le chunk, pas encore envoyée aux clients (ce sera l'étape 2, pour l'assombrissement).
 
-**Simulation** (`MoistureSimulation`) : toutes les 10 ticks, seulement sur les blocs « actifs », avec un budget de 2 ms. Un pas d'un bloc :
+**Simulation** (`MoistureSimulation`) : toutes les 10 ticks, seulement sur les blocs « actifs », un nombre fixe de blocs par passage, dans l'ordre de la file (règle `ocwo:moisture_blocks_per_step`, 500 par défaut, multipliée par l'échelle globale `ocwo:water_simulation_scale`). Comme pour toute la simulation d'eau depuis le 15/11/2026, le tick attend que ce travail soit fait : **le TPS baisse plutôt que l'eau**, et le résultat ne dépend pas de la vitesse du PC (voir 06, « Quotas déterministes »). L'aléatoire (absorption, transmission, échantillonnage) vient d'une source tirée de la graine du monde. Un pas d'un bloc :
 1. **absorption** : prend 1 niveau d'eau à un bloc d'eau voisin, avec une probabilité liée à la perméabilité de la face ;
 2. **transmission** aux voisins poreux, selon l'écart de remplissage et la plus faible des deux perméabilités (par face, ou par axe pour les blocs orientés), avec un biais vers le bas ;
 3. **suintement** (règle unique) : un bloc saturé qui reçoit encore (de l'eau ou un voisin saturé au-dessus ou sur le côté) donne 1 niveau d'eau à une case libre en dessous ou à côté, jamais au-dessus, sauf s'il « retient l'eau » ou change d'état à ce stade ;
@@ -175,11 +175,13 @@ Les blocs deviennent actifs quand l'eau bouge à côté d'eux, quand un bloc por
 
 **Pluie** : pas d'absorption (pas encore de nuages : la pluie vanilla créerait de l'eau). La règle de jeu `ocwo:rain_moisture_test` (désactivée par défaut, **non conservative**) permet d'essayer l'effet de la pluie sur les blocs de surface.
 
-**Règles de jeu** : `ocwo:moisture_simulation` (activée par défaut), `ocwo:rain_moisture_test` (désactivée).
+**Règles de jeu** : `ocwo:moisture_simulation` (activée par défaut), `ocwo:rain_moisture_test` (désactivée), `ocwo:moisture_blocks_per_step` (500).
 
 **Commande de débogage** : `/ocwo moisture [position]` affiche le matériau, l'humidité (unités et niveaux), le stade, la perméabilité de chaque face et les changements d'état prévus ; `/ocwo moisture set <position> <unités>` (opérateurs) fixe l'humidité pour un essai.
 
 **Performance** (test `wetArea`, lancé avec les tests de performance) : un bassin de 48×48, 2 blocs de profondeur, sur un sol de terre et de cobblestone. Sur 2 000 ticks : notre code d'eau prend 3,1 ms par tick en moyenne, dont 0,18 ms pour l'humidité, et 39 ms au pire tick (cibles : 10 et 50 ms). À la fin, 1 150 blocs de terre sont devenus de la boue.
+
+Avec les quotas fixes (15/11/2026), mesuré le même jour sur le même PC (chargé) pour comparer : avant, 6,0 ms en moyenne, 42 à 45 ms au pire tick ; après, 6,9 ms (dont 0,1 ms pour l'humidité), 39 à 57 ms au pire tick, 1 120 blocs de boue. Avec 2 000 blocs par passage, le pire tick montait à 70 ms : d'où la valeur de 500.
 
 **Tests automatiques** (`CheckMoistureGameTests`, dans les tests courants) : mur de cobblestone qui suinte, laine qui retient, obsidienne étanche, terre sous un bassin qui devient boue, basalte directionnel. Chaque test vérifie à chaque tick que l'eau liquide plus l'humidité ne change pas. Les tests de pression sont désormais construits en obsidienne : avec de la pierre, une partie de l'eau passait dans les murs (comportement normal, mais qui faussait ces tests de pression).
 

@@ -76,7 +76,11 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 	private static final int PRESSURE_MAX_FAILS = 12;
 
 	/** sampled: queued by the slow check near players (not by water that moved). */
-	private record PressureEntry(BlockPos pos, FlowingFluid fluid, long notBefore, int fails, boolean sampled) {
+	/**
+	 * owner: the trigger that carries on after a search (moved: next tick; blocked: retried later); other entries
+	 * (events, samples) are dropped when a search of their body started after them. seq: order of creation.
+	 */
+	private record PressureEntry(BlockPos pos, FlowingFluid fluid, long seq, int fails, boolean sampled, boolean owner) {
 	}
 
 	/** Entries ready to run (processed from the head, as far as the budget allows). */
@@ -86,13 +90,20 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 	private final LongOpenHashSet pressureQueued = new LongOpenHashSet(256, .5f);
 	/** Columns already explored this tick: other triggers of the same body wait for the next tick. */
 	private final LongOpenHashSet pressureSearched = new LongOpenHashSet(1024, .5f);
+	/** Columns explored by the last search of the current search, see tickPressure. */
+	private final LongOpenHashSet pressureLastSearch = new LongOpenHashSet(1024, .5f);
+	/** Sequence number of the last search that explored each column (cleared now and then). */
+	private final it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap pressureSearchSeq = new it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap();
+	private long pressureSeq;
+	private static final int PRESSURE_SEARCH_MEMORY = 200;
 	/** Levels carried this tick by each column of fluid (key = bottom block), see PressureSearch. */
 	private final it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap pressureUsage = new it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap();
 	/** Blocks of bodies found balanced recently: triggers inside them are dropped without a search. */
 	private final LongOpenHashSet pressureBalanced = new LongOpenHashSet(1024, .5f);
 	private static final int PRESSURE_BALANCED_MEMORY = 20;
-	/** Max time spent in pressure steps per tick, in nanoseconds (3 ms). */
-	private static final long PRESSURE_TIME_BUDGET_NANOS = 3_000_000L;
+	private boolean seeded;
+	/** System.nanoTime() after which the optional time budget stops this tick's work (Long.MAX_VALUE = no budget). */
+	private long deadline = Long.MAX_VALUE;
 
 	public CustomFluidTicks(LongPredicate chunkPredicate, ServerLevel world) {
 		super(chunkPredicate);
@@ -109,7 +120,26 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 	}
 
 	public int getTaskLimit() {
-		return world.getGameRules().get(OcwoFluidGameRules.TASK_LIMIT);
+		return scaled(world.getGameRules().get(OcwoFluidGameRules.TASK_LIMIT));
+	}
+
+	/** A quota multiplied by the game rule {@code water_simulation_scale} (at least 1). */
+	public int scaled(int quota) {
+		long v = (long) quota * world.getGameRules().get(OcwoFluidGameRules.SIMULATION_SCALE) / 100L;
+		return (int) Math.max(1L, Math.min(Integer.MAX_VALUE, v));
+	}
+
+	/** Operations of this tick, for the slow tick warning. */
+	private long pressureOps;
+	private long equalizationOps;
+	private static final long SLOW_TICK_NANOS = 1_000_000_000L;
+
+	/**
+	 * True when the optional game rule {@code water_time_budget_ms} is on and this tick has used it up. Off by default:
+	 * the simulation is deterministic and the tick always finishes its quotas (the game slows down, not the water).
+	 */
+	public boolean outOfTime() {
+		return deadline != Long.MAX_VALUE && System.nanoTime() > deadline;
 	}
 
 	public void fluidLayerUpdate(ChunkAccess chunk, BlockPos pos) {
@@ -131,7 +161,7 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 	/** Queues a full, non-falling block of fluid as the start of a pressure step (deduplicated). */
 	public void enqueuePressure(BlockPos pos, FlowingFluid fluid) {
 		if (pressureQueued.add(pos.asLong())) {
-			pressureQueue.add(new PressureEntry(pos.immutable(), fluid, 0, 0, false));
+			pressureQueue.add(new PressureEntry(pos.immutable(), fluid, ++pressureSeq, 0, false, false));
 		}
 		// water moved here: whatever was concluded about this body is outdated
 		pressureBalanced.remove(pos.asLong());
@@ -140,7 +170,7 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 	/** Queued by the slow check: dropped without a search if its body was found balanced recently. */
 	private void enqueueSampled(BlockPos pos, FlowingFluid fluid) {
 		if (pressureQueued.add(pos.asLong())) {
-			pressureQueue.add(new PressureEntry(pos.immutable(), fluid, 0, 0, true));
+			pressureQueue.add(new PressureEntry(pos.immutable(), fluid, ++pressureSeq, 0, true, false));
 		}
 	}
 
@@ -165,27 +195,49 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 			return;
 		}
 		if (now % PRESSURE_BALANCED_MEMORY == 0) pressureBalanced.clear();
-		int budget = Math.max(1, getTaskLimit() / 100);
-		int polls = budget * 8; // bounds the work spent skipping entries of balanced bodies
-		long deadline = System.nanoTime() + PRESSURE_TIME_BUDGET_NANOS;
+		if (now % PRESSURE_SEARCH_MEMORY == 0) pressureSearchSeq.clear();
+		// fixed quota of operations: 1 per entry taken from the queue, 1 per block of water explored by a search,
+		// 1 per level moved (the tick waits for it)
+		int budget = scaled(world.getGameRules().get(OcwoFluidGameRules.PRESSURE_OPERATIONS_PER_TICK));
+		int flowMax = world.getGameRules().get(OcwoFluidGameRules.PRESSURE_FLOW_MAX);
+		int startBudget = budget;
+		int[] moved = new int[2];
 		BlockPos.MutableBlockPos lowSide = new BlockPos.MutableBlockPos();
 		PressureEntry e;
-		while (budget > 0 && polls-- > 0 && System.nanoTime() < deadline && (e = pressureQueue.poll()) != null) {
+		while (budget > 0 && !outOfTime() && (e = pressureQueue.poll()) != null) {
+			budget--;
 			if (e.sampled() && pressureBalanced.contains(e.pos().asLong())) {
 				pressureQueued.remove(e.pos().asLong());
 				continue;
 			}
-			if (!pressureSearched.isEmpty()) {
-				long col = PressureSearch.columnKey(world, e.fluid(), e.pos());
-				if (col != 0L && pressureSearched.contains(col)) {
-					// its body was already handled this tick: next tick, without counting a failure
-					delay(e.pos(), e.fluid(), now + 1, e.fails());
+			// One search per body and per tick, and no search for an event that a later search already covered: a
+			// big body that keeps receiving water must not take the quota of the others (they wait in turn).
+			long col = PressureSearch.columnKey(world, e.fluid(), e.pos());
+			if (col != 0L) {
+				boolean coveredByLaterSearch = pressureSearchSeq.getOrDefault(col, -1L) > e.seq();
+				if (pressureSearched.contains(col)) {
+					if (e.owner() || coveredByLaterSearch) {
+						pressureQueued.remove(e.pos().asLong()); // that search's own trigger carries on
+					} else {
+						delayEntry(e, now + 1); // water moved here after this tick's search: next tick
+					}
+					continue;
+				}
+				if (!e.owner() && coveredByLaterSearch) {
+					pressureQueued.remove(e.pos().asLong());
 					continue;
 				}
 			}
-			budget--;
+			pressureLastSearch.clear();
 			PressureSearch.Outcome outcome = PressureSearch.step(world, e.fluid(), e.pos(), pressureUsage, limit, lowSide,
-					pressureBalanced, pressureSearched);
+					pressureBalanced, pressureLastSearch, Math.max(1, budget), flowMax, moved);
+			budget -= moved[0] + moved[1];
+			long searchSeq = ++pressureSeq;
+			for (it.unimi.dsi.fastutil.longs.LongIterator it = pressureLastSearch.iterator(); it.hasNext(); ) {
+				long k = it.nextLong();
+				pressureSearched.add(k);
+				pressureSearchSeq.put(k, searchSeq);
+			}
 			OcwoProfiler.countPressureStep(world, outcome == PressureSearch.Outcome.MOVED);
 			switch (outcome) {
 				case MOVED -> {
@@ -206,11 +258,41 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 				case BALANCED -> pressureQueued.remove(e.pos().asLong());
 			}
 		}
+		pressureOps = startBudget - budget;
+	}
+
+	/** Debug summary of the pressure queue (tests). */
+	public String debugPressureQueue() {
+		long now = world.getGameTime();
+		int full = 0, ready = pressureQueue.size(), delayed = 0, maxFails = 0;
+		java.util.TreeMap<Long, Integer> byDelay = new java.util.TreeMap<>();
+		for (PressureEntry e : pressureQueue) if (PressureSearch.isStillFull(world.getFluidState(e.pos()), e.fluid())) full++;
+		for (var en : pressureDelayed.long2ObjectEntrySet()) {
+			delayed += en.getValue().size();
+			byDelay.merge(en.getLongKey() - now, en.getValue().size(), Integer::sum);
+			for (PressureEntry e : en.getValue()) {
+				maxFails = Math.max(maxFails, e.fails());
+				if (PressureSearch.isStillFull(world.getFluidState(e.pos()), e.fluid())) full++;
+			}
+		}
+		StringBuilder head = new StringBuilder();
+		int i = 0;
+		for (PressureEntry e : pressureQueue) {
+			if (i++ >= 4) break;
+			head.append(e.pos().toShortString()).append(e.sampled() ? "s" : "").append(' ');
+		}
+		return "head [" + head + "] pressure queue: ready " + ready + ", delayed " + delayed + " " + byDelay + ", still full " + full
+				+ ", max fails " + maxFails + ", operations last tick " + pressureOps + ", balanced memory " + pressureBalanced.size();
 	}
 
 
+	/** Queues the trigger that carries on after a search (owner), for a later tick. */
 	private void delay(BlockPos pos, FlowingFluid fluid, long tick, int fails) {
-		pressureDelayed.computeIfAbsent(tick, k -> new java.util.ArrayList<>()).add(new PressureEntry(pos, fluid, tick, fails, false));
+		delayEntry(new PressureEntry(pos, fluid, ++pressureSeq, fails, false, true), tick);
+	}
+
+	private void delayEntry(PressureEntry e, long tick) {
+		pressureDelayed.computeIfAbsent(tick, k -> new java.util.ArrayList<>()).add(e);
 	}
 
 	/**
@@ -220,7 +302,7 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 	private void samplePressure() {
 		if (world.getGameTime() % PRESSURE_SAMPLE_PERIOD != 0) return;
 		if (world.getGameRules().get(OcwoFluidGameRules.PRESSURE_SEARCH_LIMIT) <= 0) return;
-		var random = world.getRandom();
+		var random = io.github.nagsfov.ocwo.util.FastMath.RANDOM;
 		for (var player : world.players()) {
 			BlockPos center = player.blockPosition();
 			for (int i = 0; i < PRESSURE_SAMPLES_PER_PLAYER; i++) {
@@ -272,6 +354,16 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		long profileStart = OcwoProfiler.isProfiling(world) ? System.nanoTime() : 0L;
 		boolean debug = io.github.nagsfov.ocwo.debug.OcwoDebug.isActive();
 		long d0 = debug ? System.nanoTime() : 0L;
+		if (!seeded) {
+			seeded = true;
+			if (world.dimension() == net.minecraft.world.level.Level.OVERWORLD) {
+				io.github.nagsfov.ocwo.util.FastMath.RANDOM.setSeed(world.getSeed());
+			}
+		}
+		long tickStart = System.nanoTime();
+		pressureOps = 0;
+		int budgetMs = world.getGameRules().get(OcwoFluidGameRules.WATER_TIME_BUDGET_MS);
+		deadline = budgetMs > 0 ? System.nanoTime() + budgetMs * 1_000_000L : Long.MAX_VALUE;
 		taskCounter = 0;
 		blockReadCounter = 0;
 		blockUpdateCounter = 0;
@@ -297,7 +389,7 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		profiler.popPush("fluid equalization");
 		EqualizationFluidTask task;
 		EqualizationFluidTask bt = equalizationQueue.peekLast();
-		while (equalizationTaskCounter < eqLim && (task = equalizationQueue.pollFirst()) != null) {
+		while (equalizationTaskCounter < eqLim && !outOfTime() && (task = equalizationQueue.pollFirst()) != null) {
 			if (bt == task) {
 				bt = null;
 			}
@@ -326,6 +418,15 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		}
 		if (bt == null) {
 			tickNumber++;
+		}
+		equalizationOps = equalizationTaskCounter;
+		long spent = System.nanoTime() - tickStart;
+		if (spent > SLOW_TICK_NANOS) {
+			// the tick is never cut (unless water_time_budget_ms is set): just say why it was slow
+			io.github.nagsfov.ocwo.Ocwo.LOGGER.warn(
+					"Water simulation took {} ms this tick in {} ({} flow tasks, {} equalization tasks, {} pressure operations). "
+							+ "Lower the game rule ocwo:water_simulation_scale if this happens often.",
+					spent / 1_000_000L, world.dimension().identifier(), taskCounter, equalizationOps, pressureOps);
 		}
 		if (profileStart != 0L) {
 			OcwoProfiler.endTick(world, System.nanoTime() - profileStart);

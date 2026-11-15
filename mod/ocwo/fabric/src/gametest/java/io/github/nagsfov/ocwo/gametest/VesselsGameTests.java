@@ -17,7 +17,9 @@ import net.minecraft.world.level.material.Fluids;
  * Two vessels w x w, of the given height, joined at the bottom by a tunnel (tw wide, th high, len long), in
  * obsidian. The left vessel is filled (all at once, or poured progressively), the right one is empty. A case
  * passes when both surfaces stay within one level of each other for 100 ticks; it fails as "stalled" when the
- * surfaces are unbalanced and nothing moved for 200 ticks; water is checked at every tick.
+ * surfaces are unbalanced and nothing moved for 200 ticks; water is checked every 10 ticks (exact conservation).
+ * Without pouring, the water must not oscillate: the left vessel never gains and the right one never loses more
+ * than 8 levels of water (pressure speed-up must not overshoot).
  */
 public class VesselsGameTests {
 
@@ -32,6 +34,15 @@ public class VesselsGameTests {
 			for (int y = 0; y <= y1; y++)
 				for (int z = 0; z <= z1; z++)
 					sum += liquid(h, x, y, z);
+		return sum;
+	}
+
+	/** Levels of water in a vessel. */
+	private static int vessel(GameTestHelper h, int x0, int w, int height) {
+		int sum = 0;
+		for (int x = x0; x < x0 + w; x++)
+			for (int z = 1; z <= w; z++)
+				for (int y = 1; y <= height; y++) sum += liquid(h, x, y, z);
 		return sum;
 	}
 
@@ -54,6 +65,15 @@ public class VesselsGameTests {
 	 * @param fill        water height in the left vessel (all at once), or poured progressively if {@code pour}
 	 */
 	private static void run(GameTestHelper h, String name, int w, int height, int tw, int th, int len, int fill, boolean pour) {
+		run(h, name, w, height, tw, th, len, fill, 0, pour, Integer.MAX_VALUE);
+	}
+
+	/**
+	 * @param fillRight  water height already in the right vessel
+	 * @param maxBalance the case fails if the vessels are not balanced by this tick
+	 */
+	private static void run(GameTestHelper h, String name, int w, int height, int tw, int th, int len, int fill, int fillRight,
+	                        boolean pour, int maxBalance) {
 		ServerLevel level = h.getLevel();
 		int quiet = Block.UPDATE_CLIENTS;
 		int xR = w + len + 1;              // first x of the right vessel
@@ -72,7 +92,8 @@ public class VesselsGameTests {
 					boolean tunnel = x > w && x < xR && z >= tz0 && z < tz0 + tw && y >= 1 && y <= th;
 					BlockState s = obsidian;
 					if (left) s = !pour && y <= fill ? water : air;
-					else if (right || tunnel) s = air;
+					else if (right) s = y <= fillRight ? water : air;
+					else if (tunnel) s = fillRight > 0 ? water : air;
 					level.setBlock(h.absolutePos(new BlockPos(x, y, z)), s, quiet);
 				}
 		for (int z = 1; z <= w; z++)
@@ -83,6 +104,7 @@ public class VesselsGameTests {
 		int pourTarget = pour ? fill * w * w : 0;
 		int[] poured = {0};
 		int[] last = {-1, -1};
+		int[] extreme = {Integer.MAX_VALUE, Integer.MIN_VALUE}; // lowest left, highest right seen
 		long[] since = {0};
 		long start = h.getTick();
 		h.onEachTick(() -> {
@@ -111,6 +133,21 @@ public class VesselsGameTests {
 				since[0] = t;
 			}
 			boolean pouring = pour && poured[0] < pourTarget;
+			if (!pour) {
+				// the left vessel only loses water, the right one only gains (8 levels of tolerance)
+				int vl = vessel(h, 1, w, height), vr = vessel(h, xR, w, height);
+				if (extreme[0] != Integer.MAX_VALUE && (vl > extreme[0] + 8 || vr < extreme[1] - 8)) {
+					h.fail(name + ": water oscillates (left vessel " + vl + " levels after " + extreme[0] + ", right " + vr
+							+ " after " + extreme[1] + ")");
+					return;
+				}
+				extreme[0] = Math.min(extreme[0], vl);
+				extreme[1] = Math.max(extreme[1], vr);
+			}
+			if (t - start > maxBalance && !(Math.abs(l - r) <= 1)) {
+				h.fail(name + ": not balanced after " + maxBalance + " ticks (left " + l + ", right " + r + ")");
+				return;
+			}
 			if (!pouring && Math.abs(l - r) <= 1 && t - since[0] >= 100) {
 				// the inspection used by the debug panel must agree: complete and balanced
 				io.github.nagsfov.ocwo.fluids.PressureSearch.Inspection in = io.github.nagsfov.ocwo.fluids.PressureSearch.inspect(
@@ -138,6 +175,15 @@ public class VesselsGameTests {
 				System.out.println("[OCWO-VESSELS]   inspect(1,1,1): high " + in.highHeight() + " low " + in.lowHeight() + " columns "
 						+ in.columns() + " complete " + in.complete() + "; pressure queue "
 						+ io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).pressureQueueSize());
+				// would a step from the bottom of the left vessel move water right now?
+				int[] mv = new int[2];
+				io.github.nagsfov.ocwo.fluids.PressureSearch.Outcome o = io.github.nagsfov.ocwo.fluids.PressureSearch.step(level,
+						Fluids.WATER, h.absolutePos(new BlockPos(1, 1, 1)), new it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap(), 65_536,
+						new BlockPos.MutableBlockPos(), new it.unimi.dsi.fastutil.longs.LongOpenHashSet(),
+						new it.unimi.dsi.fastutil.longs.LongOpenHashSet(), 1000, 4, mv);
+				System.out.println("[OCWO-VESSELS]   origin " + h.absolutePos(BlockPos.ZERO).toShortString());
+				System.out.println("[OCWO-VESSELS]   manual step: " + o + ", moved " + mv[0] + ", blocks explored " + mv[1]
+						+ "; " + io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).debugPressureQueue());
 				h.fail(name + ": stalled since tick " + (since[0] - start) + ", left surface " + l + ", right " + r);
 			}
 		});
@@ -194,6 +240,29 @@ public class VesselsGameTests {
 
 	@GameTest(environment = "ocwo-gametest:vessels_16", maxTicks = 20000, padding = 40)
 	public void pour9(GameTestHelper h) { run(h, "w9 h20 t1x1 l5 poured", 9, 20, 1, 1, 5, 18, true); }
+
+	// pressure speed-up (Valentin, 14/11/2026: square root of the difference, max 4 levels per tick)
+	/** Large difference: faster than without speed-up (3 780 ticks on 14/11/2026), without oscillation. */
+	@GameTest(environment = "ocwo-gametest:vessels_17", maxTicks = 16000, padding = 40)
+	public void fastBig(GameTestHelper h) { run(h, "w5 h40 t1x1 l5 speed-up", 5, 40, 1, 1, 5, 38, 0, false, 2500); }
+
+	/** Small difference (2 blocks: x1): same as without speed-up. */
+	@GameTest(environment = "ocwo-gametest:vessels_18", maxTicks = 6000, padding = 40)
+	public void smallDiff(GameTestHelper h) { run(h, "w5 h10 t1x1 l5 small diff", 5, 10, 1, 1, 5, 6, 4, false, Integer.MAX_VALUE); }
+
+	/** The speed-up law itself. */
+	@GameTest(environment = "ocwo-gametest:vessels_19", maxTicks = 20)
+	public void flowLaw(GameTestHelper h) {
+		int[][] cases = {{0, 4, 1}, {8, 4, 1}, {24, 4, 1}, {32, 4, 2}, {72, 4, 3}, {128, 4, 4}, {800, 4, 4}, {800, 1, 1}, {800, 16, 10}};
+		for (int[] c : cases) {
+			int got = io.github.nagsfov.ocwo.fluids.PressureSearch.flowMultiplier(c[0], c[1]);
+			if (got != c[2]) {
+				h.fail("flowMultiplier(" + c[0] + " levels, max " + c[1] + ") = " + got + ", expected " + c[2]);
+				return;
+			}
+		}
+		h.succeed();
+	}
 
 	private static final class PressureSearchFalling {
 		static boolean is(FluidState fs) {

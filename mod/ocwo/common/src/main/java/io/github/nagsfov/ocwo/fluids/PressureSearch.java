@@ -43,8 +43,18 @@ public final class PressureSearch {
 	private static final int MAX = FluidUtils.MAX_LEVEL;
 	private static final Direction[] HORIZONTAL = {Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST};
 	private static final Direction[] ALL_DIRS = Direction.values();
-	/** Transfers done with the result of one search (each one revalidated). */
+	/** Transfers done with the result of one search (each one revalidated), times the flow speed-up. */
 	private static final int TRANSFERS_PER_SEARCH = 32;
+
+	/**
+	 * Speed-up of the flow for a difference of height in levels: square root of the difference in blocks
+	 * (1 block x1, 4 blocks x2, 9 x3, 16 x4), capped by {@code max}.
+	 */
+	public static int flowMultiplier(int diffLevels, int max) {
+		int blocks = diffLevels / MAX;
+		int m = (int) Math.sqrt(Math.max(1, blocks));
+		return Math.max(1, Math.min(max, m));
+	}
 
 	public enum Outcome {
 		/** At least one level was moved. */
@@ -280,13 +290,22 @@ public final class PressureSearch {
 	 * @param lowSide  receives a block next to the last filled low point (next trigger)
 	 * @param balanced receives the cells of a body found completely balanced
 	 * @param searched receives the keys of the columns explored (one search per body and per tick)
+	 * @param maxMoves at most this many levels are moved (the rest of the tick's quota)
+	 * @param flowMax  max speed-up of the flow (see {@link #flowMultiplier})
+	 * @param movedOut receives the number of levels moved in [0] and of blocks of water explored in [1]
 	 */
 	public static Outcome step(ServerLevel world, FlowingFluid fluid, BlockPos trigger, Long2IntOpenHashMap usage,
-	                           int limit, BlockPos.MutableBlockPos lowSide, LongOpenHashSet balanced, LongOpenHashSet searched) {
+	                           int limit, BlockPos.MutableBlockPos lowSide, LongOpenHashSet balanced, LongOpenHashSet searched,
+	                           int maxMoves, int flowMax, int[] movedOut) {
+		movedOut[0] = 0;
+		movedOut[1] = 0;
 		if (limit <= 0) return Outcome.BALANCED;
 		if (!isStillFull(world.getFluidState(trigger), fluid)) return Outcome.BALANCED;
 		Search s = search(world, fluid, trigger, usage, limit);
 		searched.addAll(s.columns().keySet());
+		int cells = 0;
+		for (Column col : s.columns().values()) cells += col.capacity();
+		movedOut[1] = cells;
 		PriorityQueue<Target> highs = new PriorityQueue<>(Comparator.comparingInt((Target t) -> -t.height));
 		PriorityQueue<Target> lows = new PriorityQueue<>(Comparator.comparingInt((Target t) -> t.height));
 		highs.addAll(s.highs());
@@ -294,9 +313,12 @@ public final class PressureSearch {
 		boolean saturated = s.hitSaturated();
 		int moved = 0;
 		List<BlockPos> touched = new ArrayList<>();
-		while (moved < TRANSFERS_PER_SEARCH && !highs.isEmpty() && !lows.isEmpty()) {
+		int maxTransfers = Math.min(maxMoves, TRANSFERS_PER_SEARCH * Math.max(1, flowMax));
+		while (moved < maxTransfers && !highs.isEmpty() && !lows.isEmpty()) {
 			Target hi = highs.peek(), lo = lows.peek();
+			// a level only moves while the difference is at least 2: the water never overshoots the balance
 			if (hi.height - lo.height < 2) break;
+			int mult = flowMultiplier(hi.height - lo.height, flowMax);
 			if (hi.pos.equals(lo.pos)) {
 				lows.poll();
 				continue;
@@ -320,7 +342,7 @@ public final class PressureSearch {
 			boolean free = true;
 			for (long k : cols) {
 				Column col = s.columns().get(k);
-				if (col != null && usage.get(k) >= col.capacity()) {
+				if (col != null && usage.get(k) >= col.capacity() * mult) {
 					free = false;
 					break;
 				}
@@ -349,6 +371,7 @@ public final class PressureSearch {
 			Column via = s.columns().get(lo.via);
 			if (via != null) lowSide.set(via.top());
 		}
+		movedOut[0] = moved;
 		if (moved > 0) {
 			for (BlockPos t : touched) wakeAround(world, fluid, t);
 			return Outcome.MOVED;

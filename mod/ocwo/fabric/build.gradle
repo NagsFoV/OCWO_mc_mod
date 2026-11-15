@@ -76,7 +76,7 @@ loom {
             runDir 'build/run/gameTestPerf'
             ideConfigGenerated false
             vmArg '-Dfabric-api.gametest'
-            vmArg '-Dfabric-api.gametest.filter=ocwo-gametest:performance_*'
+            vmArg System.getProperty("ocwo.perf", "-Dfabric-api.gametest.filter=ocwo-gametest:performance_*")
         }
     }
 }
