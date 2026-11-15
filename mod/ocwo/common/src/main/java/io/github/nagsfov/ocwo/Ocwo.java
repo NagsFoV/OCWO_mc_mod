@@ -40,7 +40,7 @@ public final class Ocwo {
 			Services.PLATFORM.registerMoistureLayer();
 			Services.PLATFORM.registerServerReloadListener(MoistureData.RELOAD_ID, MoistureData.LISTENER);
 			Services.PLATFORM.registerCommands(MoistureCommand::register);
-			// Debug panel (/ocwo debug)
+			// OCWO lines of the F3 debug screen (/ocwo debug only points there)
 			Services.PLATFORM.registerDebugPayload();
 			Services.PLATFORM.registerCommands(io.github.nagsfov.ocwo.debug.OcwoDebug::register);
 		}

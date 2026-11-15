@@ -70,9 +70,9 @@ public interface IPlatformHelper {
 	/** Registers server commands. */
 	void registerCommands(java.util.function.Consumer<CommandDispatcher<CommandSourceStack>> registrar);
 
-	// ---- Debug panel ----
+	// ---- F3 debug lines ----
 
-	/** Registers the debug panel packet (server to client) and, on the client, its display. */
+	/** Registers the F3 debug packets (subscription: client to server; lines: server to client) and their handlers. */
 	void registerDebugPayload();
 
 	void sendDebug(net.minecraft.server.level.ServerPlayer player, io.github.nagsfov.ocwo.debug.DebugPayload payload);
