@@ -2,6 +2,20 @@
 
 **Statut : modèle validé par Valentin le 12/11/2026. Version 3 de l'algorithme le 14/11/2026, quotas déterministes et accélération le 15/11/2026 (branche `pression-v3`), à tester en jeu.** Code : `PressureSearch` (recherches et transfert), déclenchement dans `ClassicFlowTask.pressure`, file de pression et vérification lente dans `CustomFluidTicks`.
 
+## Vases figés à côté d'un grand plan d'eau (15/11/2026, branche `pression-file`)
+
+**Signalé par Valentin** : dans son monde, des vases ne s'équilibraient pas et la file de pression ne se vidait pas.
+
+**Cause, reproduite par les tests** : un lac plus grand que la limite de recherche (72×72 dans le test, donc plus de 1 024 colonnes) ne peut jamais être déclaré équilibré. Chaque vérification lente autour du joueur, chaque mouvement d'eau dans le lac et chaque réessai relançait une recherche de plusieurs milliers de blocs, qui prenait tout le quota du tick. Avec un lac qu'on remplit, 10 des 22 tests de vases restaient figés, même ceux qui n'étaient pas à côté du lac.
+
+**Correction** :
+- Nouveau résultat « trop grande, rien à déplacer » : le déclencheur est abandonné (pas de réessai) et les colonnes parcourues sont laissées tranquilles pendant 200 ticks.
+- Les suites de masses qu'on peut équilibrer passent d'abord, avec un quart du quota gardé pour les nouveaux déclencheurs ; une masse trop grande qui bouge encore (un lac qu'on remplit) passe à son tour avec les nouveaux déclencheurs, pas devant.
+- Le souvenir « équilibré » pour la vérification lente passe de 20 à 100 ticks.
+- Diagnostic en jeu : `/ocwo pressure queue` (opérateurs) résume la file (entrées par type, résultats des 200 derniers ticks, quota utilisé, entrées les plus anciennes avec la taille de leur masse).
+
+**Tests** : vase à côté d'un lac de 72×72 avec un joueur ; même chose pendant qu'on remplit le lac ; file qui se vide après l'équilibre. Avant : 10 tests sur 22 figés. Après : 22 sur 22 ; le vase près du lac qu'on remplit s'équilibre en 960 ticks, comme seul.
+
 ## Quotas déterministes et accélération (15/11/2026)
 
 **Décision de Valentin (14/11/2026)** : la simulation est prioritaire. Le jeu n'avance pas tant que le travail d'eau du tick n'est pas fait ; si ça rame, on réduit l'ampleur de la simulation (comme la redstone ou les ticks programmés de Minecraft). **Le TPS baisse plutôt que l'eau.**

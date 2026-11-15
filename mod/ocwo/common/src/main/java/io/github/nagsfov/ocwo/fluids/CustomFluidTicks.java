@@ -61,7 +61,7 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 	}
 
 	public int pressureQueueSize() {
-		return pressureQueue.size() + pressureDelayed.values().stream().mapToInt(java.util.List::size).sum();
+		return pressureQueue.size() + pressureOwners.size() + pressureDelayed.values().stream().mapToInt(java.util.List::size).sum();
 	}
 
 	private static double ema(double old, long nanos) {
@@ -80,11 +80,23 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 	 * owner: the trigger that carries on after a search (moved: next tick; blocked: retried later); other entries
 	 * (events, samples) are dropped when a search of their body started after them. seq: order of creation.
 	 */
-	private record PressureEntry(BlockPos pos, FlowingFluid fluid, long seq, int fails, boolean sampled, boolean owner) {
+	private record PressureEntry(BlockPos pos, FlowingFluid fluid, long seq, int fails, boolean sampled, boolean owner, long created) {
 	}
 
 	/** Entries ready to run (processed from the head, as far as the budget allows). */
 	private final ArrayDeque<PressureEntry> pressureQueue = new ArrayDeque<>();
+	/** Triggers that carry on the balancing of a body (moved: next tick; blocked: later), served first. */
+	private final ArrayDeque<PressureEntry> pressureOwners = new ArrayDeque<>();
+	/** Columns of bodies too large to explore where nothing was found to move (cleared now and then). */
+	private final LongOpenHashSet pressureUnresolved = new LongOpenHashSet(1024, .5f);
+	private static final int PRESSURE_UNRESOLVED_MEMORY = 200;
+	private final BlockPos.MutableBlockPos pressureLowSide = new BlockPos.MutableBlockPos();
+	private final int[] pressureMoved = new int[3];
+	/** Outcomes (MOVED, BALANCED, BLOCKED, UNRESOLVED) and skipped entries, current and last window (diagnostics). */
+	private static final int STAT_SKIPPED = 4;
+	private static final int PRESSURE_STATS_WINDOW = 200;
+	private final long[] pressureStats = new long[5];
+	private final long[] pressureStatsLast = new long[5];
 	/** Entries waiting for a later tick, by game tick. */
 	private final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<java.util.ArrayList<PressureEntry>> pressureDelayed = new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
 	private final LongOpenHashSet pressureQueued = new LongOpenHashSet(256, .5f);
@@ -100,7 +112,7 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 	private final it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap pressureUsage = new it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap();
 	/** Blocks of bodies found balanced recently: triggers inside them are dropped without a search. */
 	private final LongOpenHashSet pressureBalanced = new LongOpenHashSet(1024, .5f);
-	private static final int PRESSURE_BALANCED_MEMORY = 20;
+	private static final int PRESSURE_BALANCED_MEMORY = 100;
 	private boolean seeded;
 	/** System.nanoTime() after which the optional time budget stops this tick's work (Long.MAX_VALUE = no budget). */
 	private long deadline = Long.MAX_VALUE;
@@ -161,7 +173,7 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 	/** Queues a full, non-falling block of fluid as the start of a pressure step (deduplicated). */
 	public void enqueuePressure(BlockPos pos, FlowingFluid fluid) {
 		if (pressureQueued.add(pos.asLong())) {
-			pressureQueue.add(new PressureEntry(pos.immutable(), fluid, ++pressureSeq, 0, false, false));
+			pressureQueue.add(new PressureEntry(pos.immutable(), fluid, ++pressureSeq, 0, false, false, world.getGameTime()));
 		}
 		// water moved here: whatever was concluded about this body is outdated
 		pressureBalanced.remove(pos.asLong());
@@ -170,7 +182,7 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 	/** Queued by the slow check: dropped without a search if its body was found balanced recently. */
 	private void enqueueSampled(BlockPos pos, FlowingFluid fluid) {
 		if (pressureQueued.add(pos.asLong())) {
-			pressureQueue.add(new PressureEntry(pos.immutable(), fluid, ++pressureSeq, 0, true, false));
+			pressureQueue.add(new PressureEntry(pos.immutable(), fluid, ++pressureSeq, 0, true, false, world.getGameTime()));
 		}
 	}
 
@@ -183,112 +195,166 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		pressureUsage.clear();
 		pressureSearched.clear();
 		long now = world.getGameTime();
-		// Entries delayed to this tick become ready (appended after the ones left from previous ticks).
+		if (now % PRESSURE_STATS_WINDOW == 0) {
+			System.arraycopy(pressureStats, 0, pressureStatsLast, 0, pressureStats.length);
+			java.util.Arrays.fill(pressureStats, 0);
+		}
+		// Entries delayed to this tick become ready, after the ones left from previous ticks.
 		java.util.ArrayList<PressureEntry> due = pressureDelayed.remove(now);
-		if (due != null) pressureQueue.addAll(due);
-		if (pressureQueue.isEmpty()) return;
+		if (due != null) for (PressureEntry e : due) (e.owner() ? pressureOwners : pressureQueue).add(e);
+		if (pressureQueue.isEmpty() && pressureOwners.isEmpty()) return;
 		int limit = world.getGameRules().get(OcwoFluidGameRules.PRESSURE_SEARCH_LIMIT);
 		if (limit <= 0) {
 			pressureQueue.clear();
+			pressureOwners.clear();
 			pressureDelayed.clear();
 			pressureQueued.clear();
 			return;
 		}
 		if (now % PRESSURE_BALANCED_MEMORY == 0) pressureBalanced.clear();
 		if (now % PRESSURE_SEARCH_MEMORY == 0) pressureSearchSeq.clear();
-		// fixed quota of operations: 1 per entry taken from the queue, 1 per block of water explored by a search,
-		// 1 per level moved (the tick waits for it)
+		if (now % PRESSURE_UNRESOLVED_MEMORY == 0) pressureUnresolved.clear();
+		// Fixed quota of operations: 1 per entry taken from a queue, 1 per block of water explored by a search,
+		// 1 per level moved (the tick waits for it). Bodies already being balanced (owners) go first, but a quarter
+		// of the quota is kept for new triggers (events, samples), then the owners take what is left.
 		int budget = scaled(world.getGameRules().get(OcwoFluidGameRules.PRESSURE_OPERATIONS_PER_TICK));
-		int flowMax = world.getGameRules().get(OcwoFluidGameRules.PRESSURE_FLOW_MAX);
 		int startBudget = budget;
-		int[] moved = new int[2];
-		BlockPos.MutableBlockPos lowSide = new BlockPos.MutableBlockPos();
+		int reserve = startBudget / 4;
 		PressureEntry e;
-		while (budget > 0 && !outOfTime() && (e = pressureQueue.poll()) != null) {
-			budget--;
-			if (e.sampled() && pressureBalanced.contains(e.pos().asLong())) {
-				pressureQueued.remove(e.pos().asLong());
-				continue;
+		while (budget > reserve && !outOfTime() && (e = pressureOwners.poll()) != null) budget = process(e, budget, limit, now);
+		while (budget > 0 && !outOfTime() && (e = pressureQueue.poll()) != null) budget = process(e, budget, limit, now);
+		while (budget > 0 && !outOfTime() && (e = pressureOwners.poll()) != null) budget = process(e, budget, limit, now);
+		pressureOps = startBudget - budget;
+	}
+
+	/** One entry of the pressure queues; returns the quota left. */
+	private int process(PressureEntry e, int budget, int limit, long now) {
+		budget--;
+		long pos = e.pos().asLong();
+		if (e.sampled() && pressureBalanced.contains(pos)) {
+			pressureQueued.remove(pos);
+			pressureStats[STAT_SKIPPED]++;
+			return budget;
+		}
+		// One search per body and per tick, and no search for an event that a later search already covered: a
+		// big body that keeps receiving water must not take the quota of the others (they wait in turn).
+		long col = PressureSearch.columnKey(world, e.fluid(), e.pos());
+		if (col != 0L) {
+			if (!e.owner() && pressureUnresolved.contains(col)) {
+				// part of a body too large to be explored (a lake, the sea) where nothing was found to move:
+				// pressure has nothing to do there for a while (the normal flow still runs)
+				pressureQueued.remove(pos);
+				pressureStats[STAT_SKIPPED]++;
+				return budget;
 			}
-			// One search per body and per tick, and no search for an event that a later search already covered: a
-			// big body that keeps receiving water must not take the quota of the others (they wait in turn).
-			long col = PressureSearch.columnKey(world, e.fluid(), e.pos());
-			if (col != 0L) {
-				boolean coveredByLaterSearch = pressureSearchSeq.getOrDefault(col, -1L) > e.seq();
-				if (pressureSearched.contains(col)) {
-					if (e.owner() || coveredByLaterSearch) {
-						pressureQueued.remove(e.pos().asLong()); // that search's own trigger carries on
-					} else {
-						delayEntry(e, now + 1); // water moved here after this tick's search: next tick
-					}
-					continue;
+			boolean coveredByLaterSearch = pressureSearchSeq.getOrDefault(col, -1L) > e.seq();
+			if (pressureSearched.contains(col)) {
+				if (e.owner() || coveredByLaterSearch) {
+					pressureQueued.remove(pos); // that search's own trigger carries on
+					pressureStats[STAT_SKIPPED]++;
+				} else {
+					delayEntry(e, now + 1); // water moved here after this tick's search: next tick
 				}
-				if (!e.owner() && coveredByLaterSearch) {
-					pressureQueued.remove(e.pos().asLong());
-					continue;
-				}
+				return budget;
 			}
-			pressureLastSearch.clear();
-			PressureSearch.Outcome outcome = PressureSearch.step(world, e.fluid(), e.pos(), pressureUsage, limit, lowSide,
-					pressureBalanced, pressureLastSearch, Math.max(1, budget), flowMax, moved);
-			budget -= moved[0] + moved[1];
-			long searchSeq = ++pressureSeq;
-			for (it.unimi.dsi.fastutil.longs.LongIterator it = pressureLastSearch.iterator(); it.hasNext(); ) {
-				long k = it.nextLong();
-				pressureSearched.add(k);
-				pressureSearchSeq.put(k, searchSeq);
-			}
-			OcwoProfiler.countPressureStep(world, outcome == PressureSearch.Outcome.MOVED);
-			switch (outcome) {
-				case MOVED -> {
-					delay(e.pos(), e.fluid(), now + 1, 0);
-					BlockPos low = lowSide.immutable();
-					if (!low.equals(e.pos()) && pressureQueued.add(low.asLong())) {
-						delay(low, e.fluid(), now + 1, 0);
-					}
-				}
-				case BLOCKED -> {
-					int fails = e.fails() + 1;
-					if (fails > PRESSURE_MAX_FAILS) {
-						pressureQueued.remove(e.pos().asLong());
-					} else {
-						delay(e.pos(), e.fluid(), now + Math.min(64L, 1L << fails), fails);
-					}
-				}
-				case BALANCED -> pressureQueued.remove(e.pos().asLong());
+			if (!e.owner() && coveredByLaterSearch) {
+				pressureQueued.remove(pos);
+				pressureStats[STAT_SKIPPED]++;
+				return budget;
 			}
 		}
-		pressureOps = startBudget - budget;
+		pressureLastSearch.clear();
+		int flowMax = world.getGameRules().get(OcwoFluidGameRules.PRESSURE_FLOW_MAX);
+		PressureSearch.Outcome outcome = PressureSearch.step(world, e.fluid(), e.pos(), pressureUsage, limit, pressureLowSide,
+				pressureBalanced, pressureLastSearch, Math.max(1, budget), flowMax, pressureMoved);
+		budget -= pressureMoved[0] + pressureMoved[1];
+		long searchSeq = ++pressureSeq;
+		for (it.unimi.dsi.fastutil.longs.LongIterator it = pressureLastSearch.iterator(); it.hasNext(); ) {
+			long k = it.nextLong();
+			pressureSearched.add(k);
+			pressureSearchSeq.put(k, searchSeq);
+			if (outcome == PressureSearch.Outcome.UNRESOLVED) pressureUnresolved.add(k);
+		}
+		OcwoProfiler.countPressureStep(world, outcome == PressureSearch.Outcome.MOVED);
+		pressureStats[outcome.ordinal()]++;
+		switch (outcome) {
+			case MOVED -> {
+				if (pressureMoved[2] == 1) {
+					delay(e.pos(), e.fluid(), now + 1, 0);
+				} else {
+					// part of a body too large to be explored (a lake being filled): it carries on, but in turn with
+					// the new triggers, not ahead of the bodies that can be balanced
+					delayEntry(new PressureEntry(e.pos(), e.fluid(), ++pressureSeq, 0, false, false, now), now + 1);
+				}
+				BlockPos low = pressureLowSide.immutable();
+				if (!low.equals(e.pos()) && pressureQueued.add(low.asLong())) {
+					if (pressureMoved[2] == 1) delay(low, e.fluid(), now + 1, 0);
+					else delayEntry(new PressureEntry(low, e.fluid(), ++pressureSeq, 0, false, false, now), now + 1);
+				}
+			}
+			case BLOCKED -> {
+				int fails = e.fails() + 1;
+				if (fails > PRESSURE_MAX_FAILS) {
+					pressureQueued.remove(pos);
+				} else {
+					delay(e.pos(), e.fluid(), now + Math.min(64L, 1L << fails), fails);
+				}
+			}
+			case BALANCED, UNRESOLVED -> pressureQueued.remove(pos);
+		}
+		return budget;
+	}
+
+	/** Pressure entries (ready or delayed) inside a box (tests). */
+	public int pressureEntriesIn(BlockPos a, BlockPos b) {
+		net.minecraft.world.level.levelgen.structure.BoundingBox box = net.minecraft.world.level.levelgen.structure.BoundingBox.fromCorners(a, b);
+		int n = 0;
+		for (PressureEntry e : pressureQueue) if (box.isInside(e.pos())) n++;
+		for (PressureEntry e : pressureOwners) if (box.isInside(e.pos())) n++;
+		for (var list : pressureDelayed.values()) for (PressureEntry e : list) if (box.isInside(e.pos())) n++;
+		return n;
 	}
 
 	/** Debug summary of the pressure queue (tests). */
 	public String debugPressureQueue() {
-		long now = world.getGameTime();
-		int full = 0, ready = pressureQueue.size(), delayed = 0, maxFails = 0;
-		java.util.TreeMap<Long, Integer> byDelay = new java.util.TreeMap<>();
-		for (PressureEntry e : pressureQueue) if (PressureSearch.isStillFull(world.getFluidState(e.pos()), e.fluid())) full++;
-		for (var en : pressureDelayed.long2ObjectEntrySet()) {
-			delayed += en.getValue().size();
-			byDelay.merge(en.getLongKey() - now, en.getValue().size(), Integer::sum);
-			for (PressureEntry e : en.getValue()) {
-				maxFails = Math.max(maxFails, e.fails());
-				if (PressureSearch.isStillFull(world.getFluidState(e.pos()), e.fluid())) full++;
-			}
-		}
-		StringBuilder head = new StringBuilder();
-		int i = 0;
-		for (PressureEntry e : pressureQueue) {
-			if (i++ >= 4) break;
-			head.append(e.pos().toShortString()).append(e.sampled() ? "s" : "").append(' ');
-		}
-		return "head [" + head + "] pressure queue: ready " + ready + ", delayed " + delayed + " " + byDelay + ", still full " + full
-				+ ", max fails " + maxFails + ", operations last tick " + pressureOps + ", balanced memory " + pressureBalanced.size();
+		return String.join("; ", pressureReport(4));
 	}
 
+	/**
+	 * Summary of the pressure queues for /ocwo pressure queue and the tests: entries by kind, outcomes over the last
+	 * window, and the oldest entries with the size of their body.
+	 */
+	public java.util.List<String> pressureReport(int oldest) {
+		long now = world.getGameTime();
+		int owners = pressureOwners.size(), events = 0, samples = 0, delayed = 0;
+		for (PressureEntry e : pressureQueue) { if (e.sampled()) samples++; else events++; }
+		java.util.List<PressureEntry> all = new java.util.ArrayList<>(pressureOwners);
+		all.addAll(pressureQueue);
+		for (var list : pressureDelayed.values()) { delayed += list.size(); all.addAll(list); }
+		java.util.List<String> out = new java.util.ArrayList<>();
+		out.add(String.format(java.util.Locale.ROOT, "file de pression : %d prêts (%d suites de masses, %d mouvements d'eau, %d vérifications lentes), %d programmés plus tard",
+				owners + events + samples, owners, events, samples, delayed));
+		long[] st = now % PRESSURE_STATS_WINDOW < PRESSURE_STATS_WINDOW / 2 ? pressureStatsLast : pressureStats;
+		out.add(String.format(java.util.Locale.ROOT, "%d derniers ticks : %d recherches avec eau déplacée, %d équilibrées, %d bloquées, %d trop grandes sans rien à déplacer ; %d entrées écartées sans recherche",
+				PRESSURE_STATS_WINDOW, st[0], st[1], st[2], st[3], st[STAT_SKIPPED]));
+		out.add(String.format(java.util.Locale.ROOT, "quota : %d opérations par tick, %d utilisées au dernier tick ; mémoire : %d blocs équilibrés, %d colonnes trop grandes",
+				scaled(world.getGameRules().get(OcwoFluidGameRules.PRESSURE_OPERATIONS_PER_TICK)), pressureOps, pressureBalanced.size(), pressureUnresolved.size()));
+		all.sort(java.util.Comparator.comparingLong(PressureEntry::created));
+		int limit = Math.max(1, world.getGameRules().get(OcwoFluidGameRules.PRESSURE_SEARCH_LIMIT));
+		for (int k = 0; k < Math.min(oldest, all.size()); k++) {
+			PressureEntry e = all.get(k);
+			PressureSearch.Inspection in = PressureSearch.inspect(world, e.pos(), limit);
+			String kind = e.owner() ? "suite" : e.sampled() ? "vérification" : "mouvement";
+			out.add(String.format(java.util.Locale.ROOT, "  %s (%s, %d ticks, %d échecs) : masse de %s%d colonnes, %s", e.pos().toShortString(), kind,
+					now - e.created(), e.fails(), in.complete() ? "" : "plus de ", in.columns(),
+					!in.complete() ? "trop grande" : in.balanced() ? "équilibrée" : "à équilibrer"));
+		}
+		return out;
+	}
 
 	/** Queues the trigger that carries on after a search (owner), for a later tick. */
 	private void delay(BlockPos pos, FlowingFluid fluid, long tick, int fails) {
-		delayEntry(new PressureEntry(pos, fluid, ++pressureSeq, fails, false, true), tick);
+		delayEntry(new PressureEntry(pos, fluid, ++pressureSeq, fails, false, true, world.getGameTime()), tick);
 	}
 
 	private void delayEntry(PressureEntry e, long tick) {
