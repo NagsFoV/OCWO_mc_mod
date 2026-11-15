@@ -5,6 +5,7 @@ import io.github.nagsfov.ocwo.fluids.CustomFluidTicks;
 import io.github.nagsfov.ocwo.fluids.FluidUtils;
 import io.github.nagsfov.ocwo.fluids.OcwoFluidGameRules;
 import io.github.nagsfov.ocwo.fluids.PressureSearch;
+import io.github.nagsfov.ocwo.fluids.WaterBodies;
 import io.github.nagsfov.ocwo.fluids.layer.FluidLayer;
 import io.github.nagsfov.ocwo.moisture.Moisture;
 import io.github.nagsfov.ocwo.moisture.MoistureData;
@@ -137,10 +138,6 @@ public final class OcwoDebug {
 
 	// ------------------------------------------------------------------ content
 
-	private static int searchLimit(ServerLevel level) {
-		return OcwoFluidGameRules.PRESSURE_SEARCH_LIMIT == null ? 256 : level.getGameRules().get(OcwoFluidGameRules.PRESSURE_SEARCH_LIMIT);
-	}
-
 	private static String fluidName(FluidState fs) {
 		return BuiltInRegistries.FLUID.getKey(fs.getType()).getPath().replace("flowing_", "");
 	}
@@ -171,7 +168,7 @@ public final class OcwoDebug {
 			return;
 		}
 		out.add(line("ocwo.debug.head.fluid", fluidName(fs), fs.getAmount(), flags(level, pos, fs)));
-		PressureSearch.Inspection in = PressureSearch.inspect(level, pos, Math.max(1, searchLimit(level)));
+		PressureSearch.Inspection in = CustomFluidTicks.get(level).bodies().inspect(pos);
 		double depth = Math.max(0, in.highHeight() - eye.y * FluidUtils.MAX_LEVEL);
 		out.add(line("ocwo.debug.head.pressure", num(depth / FluidUtils.MAX_LEVEL), String.format(Locale.ROOT, "%.0f", depth),
 				num(in.highHeight() / (double) FluidUtils.MAX_LEVEL)));
@@ -236,11 +233,9 @@ public final class OcwoDebug {
 				num(ticks.debugPressureMillis()), num(ticks.debugMoistureMillis())));
 		out.add(line("ocwo.debug.sim.queues", ticks.moisture().activeCount(), ticks.pressureQueueSize()));
 		out.add(line("ocwo.debug.sim.mspt", String.format(Locale.ROOT, "%.1f", level.getServer().getAverageTickTimeNanos() / 1e6)));
-		int budget = rules.get(OcwoFluidGameRules.WATER_TIME_BUDGET_MS);
-		out.add(line("ocwo.debug.sim.quotas", rules.get(OcwoFluidGameRules.SIMULATION_SCALE), ticks.getTaskLimit(),
-				ticks.scaled(rules.get(OcwoFluidGameRules.PRESSURE_OPERATIONS_PER_TICK)),
-				ticks.scaled(rules.get(OcwoFluidGameRules.MOISTURE_BLOCKS_PER_STEP))));
-		out.add(line("ocwo.debug.sim.limits", rules.get(OcwoFluidGameRules.PRESSURE_FLOW_MAX),
-				budget > 0 ? budget + " ms" : key("ocwo.debug.sim.budget_off")));
+		WaterBodies b = ticks.bodies();
+		out.add(line("ocwo.debug.sim.quotas", b.distance(), b.bodyCount(), b.columnCount()));
+		out.add(line("ocwo.debug.sim.limits", b.lastBodiesWorked, b.lastTransfers, ticks.lastDeferred(),
+				rules.get(OcwoFluidGameRules.PRESSURE_FLOW_MAX)));
 	}
 }

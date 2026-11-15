@@ -116,14 +116,14 @@ public class VesselsGameTests {
 		h.onEachTick(() -> {
 			long t = h.getTick();
 			if (balancedAt[0] >= 0) {
-				// after balance: the pressure queue must empty itself for this area (nothing moves any more)
-				int left = io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).pressureEntriesIn(
+				// after balance: the bodies of this area must leave the work list (nothing moves any more)
+				int left = io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).bodies().workIn(
 						h.absolutePos(BlockPos.ZERO), h.absolutePos(new BlockPos(xMax, height + 1, zMax)));
 				if (left == 0) {
-					System.out.println(String.format("[OCWO-VESSELS] %-34s queue empty %d ticks after balance", name, t - balancedAt[0]));
+					System.out.println(String.format("[OCWO-VESSELS] %-34s work list empty %d ticks after balance", name, t - balancedAt[0]));
 					h.succeed();
 				} else if (t - balancedAt[0] > 400) {
-					h.fail(name + ": pressure queue not empty 400 ticks after balance (" + left + " entries in the area)");
+					h.fail(name + ": bodies still in the work list 400 ticks after balance (" + left + ")");
 				}
 				return;
 			}
@@ -135,6 +135,12 @@ public class VesselsGameTests {
 					poured[0]++;
 					expected[0] += 8;
 				}
+			}
+			// complete simulation: no water work may be left over at the end of a tick
+			int deferred = io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).lastDeferred();
+			if (deferred != 0) {
+				h.fail(name + ": " + deferred + " pieces of water work deferred to a later tick");
+				return;
 			}
 			// what the slow check does near a player in game: queue a block of the body now and then
 			if (t % 50 == 0) io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).enqueuePressure(h.absolutePos(new BlockPos(1, 1, 1)), Fluids.WATER);
@@ -170,7 +176,12 @@ public class VesselsGameTests {
 				// the inspection used by the debug panel must agree: complete and balanced
 				io.github.nagsfov.ocwo.fluids.PressureSearch.Inspection in = io.github.nagsfov.ocwo.fluids.PressureSearch.inspect(
 						level, h.absolutePos(new BlockPos(1, 1, 1)), 65_536);
+				if (!in.balanced() && io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).bodies().workIn(
+						h.absolutePos(BlockPos.ZERO), h.absolutePos(new BlockPos(xMax, height + 1, zMax))) > 0) {
+					return; // a difference left by the flow after this tick's pressure pass: the body has work, next tick
+				}
 				if (!in.balanced()) {
+					System.out.println("[OCWO-VESSELS]   " + io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).bodies().debugBody(h.absolutePos(new BlockPos(1, 1, 1))));
 					h.fail(name + ": surfaces equal but the inspection says not balanced (high " + in.highHeight() + ", low "
 							+ in.lowHeight() + ", " + in.columns() + " columns, complete " + in.complete() + ")");
 					return;
@@ -194,15 +205,8 @@ public class VesselsGameTests {
 				System.out.println("[OCWO-VESSELS]   inspect(1,1,1): high " + in.highHeight() + " low " + in.lowHeight() + " columns "
 						+ in.columns() + " complete " + in.complete() + "; pressure queue "
 						+ io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).pressureQueueSize());
-				// would a step from the bottom of the left vessel move water right now?
-				int[] mv = new int[3];
-				io.github.nagsfov.ocwo.fluids.PressureSearch.Outcome o = io.github.nagsfov.ocwo.fluids.PressureSearch.step(level,
-						Fluids.WATER, h.absolutePos(new BlockPos(1, 1, 1)), new it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap(), 65_536,
-						new BlockPos.MutableBlockPos(), new it.unimi.dsi.fastutil.longs.LongOpenHashSet(),
-						new it.unimi.dsi.fastutil.longs.LongOpenHashSet(), 1000, 4, mv);
-				System.out.println("[OCWO-VESSELS]   origin " + h.absolutePos(BlockPos.ZERO).toShortString());
-				System.out.println("[OCWO-VESSELS]   manual step: " + o + ", moved " + mv[0] + ", blocks explored " + mv[1]
-						+ "; " + io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).debugPressureQueue());
+				System.out.println("[OCWO-VESSELS]   origin " + h.absolutePos(BlockPos.ZERO).toShortString() + "; "
+						+ io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).debugPressureQueue());
 				h.fail(name + ": stalled since tick " + (since[0] - start) + ", left surface " + l + ", right " + r);
 			}
 		});

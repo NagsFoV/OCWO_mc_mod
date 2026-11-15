@@ -6,9 +6,6 @@ import net.minecraft.world.level.gamerules.GameRule;
 
 public class OcwoFluidGameRules {
 
-	public static final GameRule<Integer> TASK_LIMIT = enabled()
-			? Services.PLATFORM.registerIntRule("task_limit", 10_000, 500, Integer.MAX_VALUE) : null;
-
 	public static final GameRule<Boolean> DRIPSTONE_FILL_CAULDRON = enabled()
 			? Services.PLATFORM.registerBooleanRule("dripstone_fill_cauldron", false) : null;
 
@@ -25,10 +22,6 @@ public class OcwoFluidGameRules {
 	public static final GameRule<Boolean> BUCKET_AREA_PICKUP = enabled()
 			? Services.PLATFORM.registerBooleanRule("bucket_area_pickup", true) : null;
 
-	/** Max number of columns of fluid explored by one pressure search (0 = pressure disabled). See 06-pression.md. */
-	public static final GameRule<Integer> PRESSURE_SEARCH_LIMIT = enabled()
-			? Services.PLATFORM.registerIntRule("pressure_search_limit", 1024, 0, 65_536) : null;
-
 	/** Block moisture simulation (03-humidite-et-etats-des-blocs.md). */
 	public static final GameRule<Boolean> MOISTURE_SIMULATION = enabled()
 			? Services.PLATFORM.registerBooleanRule("moisture_simulation", true) : null;
@@ -36,28 +29,21 @@ public class OcwoFluidGameRules {
 	/** TEST ONLY, NOT CONSERVATIVE: vanilla rain adds moisture to the top blocks (no clouds yet). */
 	public static final GameRule<Boolean> RAIN_MOISTURE_TEST = enabled()
 			? Services.PLATFORM.registerBooleanRule("rain_moisture_test", false) : null;
-	/**
-	 * Pressure operations per tick: a search costs 1 per block of water it explores, each level moved costs 1. Fixed quota: the tick waits for it
-	 * (see 06-pression.md). Multiplied by {@link #SIMULATION_SCALE}.
-	 */
-	public static final GameRule<Integer> PRESSURE_OPERATIONS_PER_TICK = enabled()
-			? Services.PLATFORM.registerIntRule("pressure_operations_per_tick", 2048, 1, 10_000_000) : null;
 
-	/** Blocks simulated per moisture step (every 10 ticks). Fixed quota, multiplied by the simulation scale. */
-	public static final GameRule<Integer> MOISTURE_BLOCKS_PER_STEP = enabled()
-			? Services.PLATFORM.registerIntRule("moisture_blocks_per_step", 500, 1, 10_000_000) : null;
+	/** Hydraulic pressure (communicating vessels, tunnels that fill up...). See 06-pression.md. */
+	public static final GameRule<Boolean> WATER_PRESSURE = enabled()
+			? Services.PLATFORM.registerBooleanRule("water_pressure", true) : null;
+
+	/**
+	 * Water simulation distance in chunks around players (-1 = the server's simulation distance). Beyond it, water
+	 * is frozen, nothing lost, like chunks that do not tick. This sets the amount of work of the water simulation.
+	 */
+	public static final GameRule<Integer> WATER_SIMULATION_DISTANCE = enabled()
+			? Services.PLATFORM.registerIntRule("water_simulation_distance", -1, -1, 64) : null;
 
 	/** Max speed-up of pressure flow (levels per tick and per block of opening); 1 = no speed-up. */
 	public static final GameRule<Integer> PRESSURE_FLOW_MAX = enabled()
 			? Services.PLATFORM.registerIntRule("pressure_flow_max", 4, 1, 16) : null;
-
-	/** Percentage applied to every quota of the water simulation (flow tasks, pressure, moisture). */
-	public static final GameRule<Integer> SIMULATION_SCALE = enabled()
-			? Services.PLATFORM.registerIntRule("water_simulation_scale", 100, 1, 1000) : null;
-
-	/** Optional time cap of the water simulation per tick, in ms (0 = off: the tick always finishes its quotas). */
-	public static final GameRule<Integer> WATER_TIME_BUDGET_MS = enabled()
-			? Services.PLATFORM.registerIntRule("water_time_budget_ms", 0, 0, 1000) : null;
 
 	private static boolean enabled() {
 		return OcwoBootConfig.INSTANCE.isFluidPhysicsEnabled();

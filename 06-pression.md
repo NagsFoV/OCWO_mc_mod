@@ -1,6 +1,44 @@
 # 06. Pression de l'eau
 
-**Statut : modèle validé par Valentin le 12/11/2026. Version 3 de l'algorithme le 14/11/2026, quotas déterministes et accélération le 15/11/2026 (branche `pression-v3`), à tester en jeu.** Code : `PressureSearch` (recherches et transfert), déclenchement dans `ClassicFlowTask.pressure`, file de pression et vérification lente dans `CustomFluidTicks`.
+**Statut : modèle validé par Valentin le 12/11/2026. Version 3 de l'algorithme le 14/11/2026, quotas déterministes et accélération le 15/11/2026, simulation complète à chaque tick le 15/11/2026 (branche `simulation-complete`), à tester en jeu.** Code : `PressureSearch` (recherches et transfert), déclenchement dans `ClassicFlowTask.pressure`, file de pression et vérification lente dans `CustomFluidTicks`.
+
+## Simulation complète à chaque tick (15/11/2026, branche `simulation-complete`)
+
+**Décision de Valentin** : rien n'avance tant que la simulation du tick n'est pas finie, comme une explosion de TNT. Chaque tick fait en entier tout le travail d'eau dû à ce tick ; s'il est lourd, le jeu ralentit. L'eau garde sa vitesse physique (niveaux par tick, accélération ×4) : un grand vase met toujours du temps à s'équilibrer, mais c'est de l'écoulement, pas du calcul reporté. **L'ampleur se règle par la distance de simulation de l'eau**, pas par des quotas. Si un cas reste trop lourd, on simplifie le système plutôt que de remettre des calculs en attente.
+
+**Ce qui a changé** :
+- Écoulement (PhysEx) : toutes les tâches dues au tick (plus de `task_limit`), et toutes les tâches d'égalisation en file au début du passage.
+- Pression : chaque masse d'eau qui a du travail est traitée à chaque tick, sans quota ni réessai différé, avec une analyse complète (plus de limite de colonnes).
+- Humidité : tous les blocs actifs à chaque pas de 10 ticks.
+- Règles supprimées : `task_limit`, `pressure_search_limit`, `pressure_operations_per_tick`, `moisture_blocks_per_step`, `water_simulation_scale`, `water_time_budget_ms`.
+- Règles ajoutées : `ocwo:water_pressure` (activée ; remplace `pressure_search_limit 0` pour couper la pression) et `ocwo:water_simulation_distance` en chunks (-1 par défaut = les chunks qui tournent, donc la distance de simulation du serveur). Au-delà, l'eau est figée sans rien perdre et compte comme une paroi pour la pression.
+- Avertissement dans le journal quand l'eau prend plus de 1 s dans un tick (sans couper le tick).
+- `/ocwo pressure queue` décrit désormais les masses d'eau suivies (nombre, colonnes, travail du dernier tick, travail reporté, plus grandes masses).
+
+**Comment la pression reste abordable sans limite** (`WaterBodies`) :
+- Chaque masse d'eau rencontrée est **gardée en mémoire d'un tick à l'autre** : ses colonnes de blocs pleins, les liens entre colonnes voisines, et un tas des surfaces libres (de la plus haute à la plus basse) et un tas des points libres (du plus bas au plus haut).
+- Quand un bloc change, seul son voisinage est mis à jour : la colonne concernée est re-mesurée (le plus souvent sur place, en gardant son identité), ses liens sont recalculés, et les 7 cases autour sont réévaluées comme cibles. Pas de nouvelle exploration de la masse.
+- Fusion : un lien qui apparaît entre deux masses les réunit (la plus petite rejoint la plus grande). Séparation : quand un lien disparaît, on vérifie en mémoire (sans lire le monde) si la masse est toujours d'un seul tenant, et on la coupe sinon.
+- Les entrées des tas sont vérifiées contre le monde seulement quand elles arrivent en tête ; les entrées périmées sont alors jetées.
+- Les chemins entre la surface haute et le point bas suivent un arbre couvrant de la masse, gardé tant qu'aucun lien de l'arbre ne disparaît ; il sert à respecter le débit des ouvertures.
+
+**Tests** : les 22 tests de vases passent, avec à chaque tick un contrôle que rien n'est reporté (`lastDeferred` = 0) ; 14 tests courants ; contrôle des mixins sans problème. Vases un peu plus rapides : 5×5×40 en 1 400 ticks (1 460 avant), 9×9 en 2 960 (3 170), 12×12 en 5 210 (5 670), vase à côté d'un lac qu'on remplit en 900 (960).
+
+**Mesures** (moyenne / pire tick du code de l'eau, chaque scénario lancé seul) :
+
+| Scénario | Avant (quotas, branche `pression-file`) | Après (simulation complète) |
+|---|---|---|
+| Lac 32×32×8 qui se vide (`midLake`) | 6,7 / 70 ms | 4,3 / 38 ms |
+| Vase à côté de ce lac (`midLakeVessel`) | 6,0 / 46 ms, vases équilibrés au tick 1 580 | 5,4 / 39 ms, vases équilibrés au tick 900 |
+| Lac 64×64×16 qui se vide (`bigLake`) | 30,7 / 84 ms (pression 5,6) | 28,7 / 126 ms (pression 9,8) |
+| PhysEx seul, lac 64×64×16 | 20 à 28 / 36 à 55 ms | 20,2 / 107 ms |
+| Bassin humide 48×48 (`wetArea`) | 6,9 / 39 à 57 ms | 2,3 / 157 ms (premiers ticks) |
+| Mer 160×160×12 avec un joueur qui construit (`seaActivity`) | - | 0,8 / 33 ms |
+
+**Cas encore lourds** (à décider avec Valentin) :
+- Le grand lac de 64×64×16 qui se vide : 29 ms en moyenne, au-dessus de la cible de 10 ms, et des pires ticks au-dessus de 100 ms. L'essentiel vient de l'écoulement PhysEx sans limite (20 ms seul), la pression ajoute environ 10 ms.
+- Les gros changements soudains (poser d'un coup un bassin de 48×48, ou une mer) font un tick très long : jusqu'à 1,2 s pour 280 000 tâches d'écoulement ou 50 000 colonnes de pression à construire. C'est le principe « comme une explosion de TNT », mais une mer naturelle découverte pour la première fois coûtera aussi un tick long (environ 25 µs par colonne : 2 à 3 s pour une mer de 100 000 colonnes dans la distance de simulation).
+- Simplifications possibles : pression tous les 2 ou 4 ticks (en entier) ; mers et grands lacs naturels traités comme des réservoirs au niveau de la mer sans analyse de pression ; distance de simulation de l'eau plus petite par défaut.
 
 ## Vases figés à côté d'un grand plan d'eau (15/11/2026, branche `pression-file`)
 
@@ -12,7 +50,7 @@
 - Nouveau résultat « trop grande, rien à déplacer » : le déclencheur est abandonné (pas de réessai) et les colonnes parcourues sont laissées tranquilles pendant 200 ticks.
 - Les suites de masses qu'on peut équilibrer passent d'abord, avec un quart du quota gardé pour les nouveaux déclencheurs ; une masse trop grande qui bouge encore (un lac qu'on remplit) passe à son tour avec les nouveaux déclencheurs, pas devant.
 - Le souvenir « équilibré » pour la vérification lente passe de 20 à 100 ticks.
-- Diagnostic en jeu : `/ocwo pressure queue` (opérateurs) résume la file (entrées par type, résultats des 200 derniers ticks, quota utilisé, entrées les plus anciennes avec la taille de leur masse).
+- Diagnostic en jeu : `/ocwo pressure queue` (opérateurs) résumait la file (depuis la simulation complète, elle décrit les masses d'eau suivies) (entrées par type, résultats des 200 derniers ticks, quota utilisé, entrées les plus anciennes avec la taille de leur masse).
 
 **Tests** : vase à côté d'un lac de 72×72 avec un joueur ; même chose pendant qu'on remplit le lac ; file qui se vide après l'équilibre. Avant : 10 tests sur 22 figés. Après : 22 sur 22 ; le vase près du lac qu'on remplit s'équilibre en 960 ticks, comme seul.
 

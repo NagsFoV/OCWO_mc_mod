@@ -1,6 +1,6 @@
 {
   "type": "minecraft:game_rules",
   "rules": {
-    "ocwo:pressure_search_limit": 0
+    "ocwo:water_pressure": false
   }
 }
