@@ -20,8 +20,8 @@ import net.minecraft.world.level.material.Fluids;
 /**
  * OCWO block moisture simulation for one level (see 03-humidite-et-etats-des-blocs.md).
  * <p>
- * Slow: runs every {@link #PERIOD} ticks, only on "active" blocks, a fixed number of them per step (game rule
- * {@code moisture_blocks_per_step}, in queue order: deterministic, the tick waits for it). One step of a block:
+ * Slow: runs every {@link #PERIOD} ticks, on every "active" block within the water simulation distance (complete:
+ * the tick waits for it; blocks beyond the distance are frozen). One step of a block:
  * <ol>
  *   <li>absorption: takes one water level from a neighbouring water block (if not full);</li>
  *   <li>transmission: shares moisture with porous neighbours, by fill ratio and permeability, biased downwards;</li>
@@ -147,13 +147,17 @@ public final class MoistureSimulation {
 		if (time % SAMPLE_PERIOD == 0) sample();
 		if (time % PERIOD != 0 || active.isEmpty()) return;
 		long start = System.nanoTime();
-		io.github.nagsfov.ocwo.fluids.CustomFluidTicks ticks = io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level);
-		int count = Math.min(active.size(), ticks.scaled(level.getGameRules().get(OcwoFluidGameRules.MOISTURE_BLOCKS_PER_STEP)));
+		io.github.nagsfov.ocwo.fluids.WaterBodies range = io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).bodies();
+		// every active block, each step (the blocks it activates are for the next step)
+		int count = active.size();
 		BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-		for (int i = 0; i < count && !active.isEmpty() && !ticks.outOfTime(); i++) {
+		for (int i = 0; i < count && !active.isEmpty(); i++) {
 			long p = active.removeFirstLong();
 			pos.set(BlockPos.getX(p), BlockPos.getY(p), BlockPos.getZ(p));
-			if (!level.isLoaded(pos)) continue;
+			if (!level.isLoaded(pos) || !range.inRange(pos)) {
+				active.add(p); // frozen beyond the water simulation distance: it waits, nothing is lost
+				continue;
+			}
 			if (step(pos.immutable())) active.add(p);
 		}
 		OcwoProfiler.addMoistureNanos(level, System.nanoTime() - start);

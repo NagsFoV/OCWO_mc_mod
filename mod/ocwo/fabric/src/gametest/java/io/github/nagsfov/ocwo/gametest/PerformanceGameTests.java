@@ -1,13 +1,15 @@
 package io.github.nagsfov.ocwo.gametest;
 
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.world.level.block.Blocks;
 
 /**
  * OCWO performance scenarios: a lake drained into a basement, measuring the time spent in our water code.
  * Not part of the regular run: launch them with gradlew :fabric:runGameTestPerf.
  * Each scenario has its own test environment, so it runs alone in its batch (no shared budget, clean timing).
- * The "no pressure" variants set ocwo:pressure_search_limit to 0: they measure the original PhysEx engine alone.
+ * The "no pressure" variants set ocwo:water_pressure to false: they measure the original PhysEx engine alone.
  */
 public class PerformanceGameTests {
 
@@ -38,6 +40,110 @@ public class PerformanceGameTests {
 		run.start();
 	}
 
+	/**
+	 * Vessels next to the 32x32x8 lake while it drains (Valentin, 15/11/2026): a 5x5x20 vessel, full, joined by a
+	 * 1x1 tunnel to an empty one, beside the pool. Reports the water code time and when the vessels balanced.
+	 */
+	@GameTest(environment = "ocwo-gametest:perf_mid_vessel", maxTicks = 9_000, padding = 32)
+	public void midLakeVessel(GameTestHelper h) {
+		DrainScenario.Pool pool = midLake();
+		DrainScenario.Run run = new DrainScenario.Run(h, pool, "midLake with vessels (pressure on)", MAX_DRAIN_TICKS, true);
+		run.failWhenSlow = false;
+		int x0 = 2, z0 = pool.size() + 6, w = 5, height = 20, len = 5;
+		net.minecraft.server.level.ServerLevel level = h.getLevel();
+		int xR = x0 + w + len + 1;
+		for (int x = x0 - 1; x <= xR + w; x++)
+			for (int z = 0; z <= w + 1; z++)
+				for (int y = 0; y <= height + 1; y++) {
+					boolean inZ = z >= 1 && z <= w;
+					boolean left = x >= x0 && x < x0 + w && inZ && y >= 1;
+					boolean right = x >= xR && x < xR + w && inZ && y >= 1;
+					boolean tunnel = x >= x0 + w && x < xR && z == 3 && y == 1;
+					net.minecraft.world.level.block.state.BlockState st = Blocks.OBSIDIAN.defaultBlockState();
+					if (left) st = y <= height - 2 ? Blocks.WATER.defaultBlockState() : Blocks.AIR.defaultBlockState();
+					else if (right || tunnel) st = Blocks.AIR.defaultBlockState();
+					level.setBlock(h.absolutePos(new BlockPos(x, y, z0 + z)), st, net.minecraft.world.level.block.Block.UPDATE_CLIENTS);
+				}
+		level.scheduleTick(h.absolutePos(new BlockPos(x0 + w - 1, 1, z0 + 3)), net.minecraft.world.level.material.Fluids.WATER, 1);
+		long start = h.getTick();
+		boolean[] done = {false};
+		h.onEachTick(() -> {
+			if (done[0] || (h.getTick() - start) % 10 != 0) return;
+			int l = top(h, x0, z0, w, height), r = top(h, xR, z0, w, height);
+			if (l >= 0 && r >= 0 && Math.abs(l - r) <= 1) {
+				done[0] = true;
+				System.out.println("[OCWO-TEST] midLake with vessels: vessels balanced at tick " + (h.getTick() - start));
+			}
+		});
+		run.start();
+	}
+
+	/**
+	 * A sea of 160 x 160 x 12 blocks (25 600 columns) with a player in it who keeps placing and breaking blocks under
+	 * water near them: the body of water is built once (complete, no limit) then only updated around the changes.
+	 * Reports the time of our water code; the 10 / 50 ms targets are not enforced.
+	 */
+	@GameTest(environment = "ocwo-gametest:perf_sea", maxTicks = 3_000, padding = 32)
+	public void seaActivity(GameTestHelper h) {
+		int n = 160, depth = 12;
+		net.minecraft.server.level.ServerLevel level = h.getLevel();
+		DrainScenario.forceChunks(h, n + 2, true);
+		for (int x = 0; x <= n + 1; x++)
+			for (int z = 0; z <= n + 1; z++)
+				for (int y = 0; y <= depth + 1; y++) {
+					boolean inside = x >= 1 && x <= n && z >= 1 && z <= n && y >= 1;
+					net.minecraft.world.level.block.state.BlockState st = !inside ? Blocks.OBSIDIAN.defaultBlockState()
+							: y <= depth ? Blocks.WATER.defaultBlockState() : Blocks.AIR.defaultBlockState();
+					level.setBlock(h.absolutePos(new BlockPos(x, y, z)), st, net.minecraft.world.level.block.Block.UPDATE_CLIENTS);
+				}
+		net.minecraft.server.level.ServerPlayer player = h.makeMockServerPlayerInLevel();
+		BlockPos c = h.absolutePos(new BlockPos(n / 2, depth + 2, n / 2));
+		player.teleportTo(c.getX() + 0.5, c.getY(), c.getZ() + 0.5);
+		long start = h.getTick();
+		long[] firstTick = {-1};
+		int[] k = {0};
+		h.onEachTick(() -> {
+			long t = h.getTick() - start;
+			if (t == 5) {
+				io.github.nagsfov.ocwo.util.OcwoProfiler.start(level);
+				io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).enqueuePressure(h.absolutePos(new BlockPos(n / 2, 1, n / 2)),
+						net.minecraft.world.level.material.Fluids.WATER);
+			}
+			if (t == 7) firstTick[0] = (long) (io.github.nagsfov.ocwo.util.OcwoProfiler.maxMillis() * 1000);
+			if (t > 10 && t % 4 == 0 && t < 2000) {
+				// place or break a block under water near the player
+				int dx = (k[0] * 7) % 17 - 8, dz = (k[0] * 11) % 17 - 8;
+				BlockPos p = new BlockPos(n / 2 + dx, 6, n / 2 + dz);
+				boolean solid = !level.getBlockState(h.absolutePos(p)).getFluidState().isEmpty();
+				level.setBlock(h.absolutePos(p), solid ? Blocks.STONE.defaultBlockState() : Blocks.WATER.defaultBlockState(),
+						net.minecraft.world.level.block.Block.UPDATE_ALL);
+				k[0]++;
+			}
+			if (t == 2100) {
+				var b = io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).bodies();
+				System.out.println(String.format(java.util.Locale.ROOT,
+						"[OCWO-TEST] seaActivity performance over %d ticks: water code %.2f ms/tick average (pressure %.2f), %.2f ms worst tick (first build of the sea: %.1f ms); bodies %d, columns %d, levels moved %d",
+						io.github.nagsfov.ocwo.util.OcwoProfiler.ticks(), io.github.nagsfov.ocwo.util.OcwoProfiler.averageMillis(),
+						io.github.nagsfov.ocwo.util.OcwoProfiler.pressureAverageMillis(), io.github.nagsfov.ocwo.util.OcwoProfiler.maxMillis(),
+						firstTick[0] / 1000.0, b.bodyCount(), b.columnCount(), io.github.nagsfov.ocwo.util.OcwoProfiler.pressureMoves()));
+				io.github.nagsfov.ocwo.util.OcwoProfiler.stop();
+				DrainScenario.forceChunks(h, n + 2, false);
+				h.succeed();
+			}
+		});
+	}
+
+	private static int top(GameTestHelper h, int x0, int z0, int w, int height) {
+		int best = -1;
+		for (int x = x0; x < x0 + w; x++)
+			for (int z = 1; z <= w; z++)
+				for (int y = height; y >= 1; y--) {
+					var fs = h.getLevel().getFluidState(h.absolutePos(new BlockPos(x, y, z0 + z)));
+					if (!fs.isEmpty()) { best = Math.max(best, y * 8 + fs.getAmount()); break; }
+				}
+		return best;
+	}
+
 	/** Realistic case: must stay under 10 ms per tick on average and 50 ms on the worst tick. */
 	@GameTest(environment = "ocwo-gametest:perf_mid", maxTicks = 9_000, padding = 32)
 	public void midLake(GameTestHelper h) {
@@ -60,6 +166,8 @@ public class PerformanceGameTests {
 	public void wetArea(GameTestHelper h) {
 		int n = 48;
 		net.minecraft.server.level.ServerLevel level = h.getLevel();
+		// the water is simulated in ticking chunks only (water simulation distance): keep them ticking
+		DrainScenario.forceChunks(h, n + 1, true);
 		int quiet = net.minecraft.world.level.block.Block.UPDATE_CLIENTS;
 		for (int x = 0; x <= n + 1; x++)
 			for (int z = 0; z <= n + 1; z++) {
@@ -84,6 +192,7 @@ public class PerformanceGameTests {
 		h.runAfterDelay(6, () -> initial[0] = WaterCount.units(h, 0, 0, 0, n + 1, 4, n + 1));
 		h.runAfterDelay(2_006, () -> {
 			io.github.nagsfov.ocwo.util.OcwoProfiler.stop();
+			DrainScenario.forceChunks(h, n + 1, false);
 			long now = WaterCount.units(h, 0, 0, 0, n + 1, 4, n + 1);
 			int mud = 0;
 			long moisture = 0;

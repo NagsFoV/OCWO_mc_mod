@@ -563,8 +563,7 @@ public final class FluidUtils {
 				if (rem > 0) {
 					// OCWO: no room nearby (e.g. deep in a lake): push the water up to the surface of the body
 					// of water instead of leaving it trapped inside the placed block.
-					int limit = world.getGameRules().get(OcwoFluidGameRules.PRESSURE_SEARCH_LIMIT);
-					rem = PressureSearch.pushToSurface(world, to, fluid, rem, limit * 4);
+					rem = PressureSearch.pushToSurface(world, to, fluid, rem, 4096);
 				}
 				setFluid(world, to, fluid, rem, false);
 			}
@@ -636,6 +635,7 @@ public final class FluidUtils {
 			}
 			if (!world.isClientSide()) {
 				CustomFluidTicks.get(world).fluidLayerUpdate(ca, to);
+				CustomFluidTicks.get(world).onBlockChanged(to);
 				Fluid updateFluid = fluid;
 				if (fs.isEmpty()) {
 					updateFluid = toFs.getType();
