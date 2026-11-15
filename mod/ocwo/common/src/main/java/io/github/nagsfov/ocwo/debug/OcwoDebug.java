@@ -62,14 +62,25 @@ public final class OcwoDebug {
 		return active;
 	}
 
-	/** {@code /ocwo debug} only says where the debug information went. */
+	/**
+	 * {@code /ocwo debug} only says where the debug information went; {@code /ocwo pressure queue} (operators) sums up
+	 * the pressure queue of the current dimension.
+	 */
 	public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
 		dispatcher.register(Commands.literal("ocwo")
 				.then(Commands.literal("debug")
 						.executes(ctx -> {
 							ctx.getSource().sendSuccess(() -> Component.translatable("ocwo.debug.command"), false);
 							return 1;
-						})));
+						}))
+				.then(Commands.literal("pressure")
+						.requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+						.then(Commands.literal("queue")
+								.executes(ctx -> {
+									List<String> lines = CustomFluidTicks.get(ctx.getSource().getLevel()).pressureReport(5);
+									for (String l : lines) ctx.getSource().sendSuccess(() -> Component.literal(l), false);
+									return lines.size();
+								}))));
 	}
 
 	/** A player's client changed the OCWO entries shown in F3 (0 = none). */

@@ -68,12 +68,17 @@ public class VesselsGameTests {
 		run(h, name, w, height, tw, th, len, fill, 0, pour, Integer.MAX_VALUE);
 	}
 
+	private static void run(GameTestHelper h, String name, int w, int height, int tw, int th, int len, int fill, int fillRight,
+	                        boolean pour, int maxBalance) {
+		run(h, name, w, height, tw, th, len, fill, fillRight, pour, maxBalance, false);
+	}
+
 	/**
 	 * @param fillRight  water height already in the right vessel
 	 * @param maxBalance the case fails if the vessels are not balanced by this tick
 	 */
 	private static void run(GameTestHelper h, String name, int w, int height, int tw, int th, int len, int fill, int fillRight,
-	                        boolean pour, int maxBalance) {
+	                        boolean pour, int maxBalance, boolean drain) {
 		ServerLevel level = h.getLevel();
 		int quiet = Block.UPDATE_CLIENTS;
 		int xR = w + len + 1;              // first x of the right vessel
@@ -106,9 +111,22 @@ public class VesselsGameTests {
 		int[] last = {-1, -1};
 		int[] extreme = {Integer.MAX_VALUE, Integer.MIN_VALUE}; // lowest left, highest right seen
 		long[] since = {0};
+		long[] balancedAt = {-1};
 		long start = h.getTick();
 		h.onEachTick(() -> {
 			long t = h.getTick();
+			if (balancedAt[0] >= 0) {
+				// after balance: the pressure queue must empty itself for this area (nothing moves any more)
+				int left = io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).pressureEntriesIn(
+						h.absolutePos(BlockPos.ZERO), h.absolutePos(new BlockPos(xMax, height + 1, zMax)));
+				if (left == 0) {
+					System.out.println(String.format("[OCWO-VESSELS] %-34s queue empty %d ticks after balance", name, t - balancedAt[0]));
+					h.succeed();
+				} else if (t - balancedAt[0] > 400) {
+					h.fail(name + ": pressure queue not empty 400 ticks after balance (" + left + " entries in the area)");
+				}
+				return;
+			}
 			// progressive pouring: one block of water at the top of the left vessel every 4 ticks
 			if (pour && poured[0] < pourTarget && t % 4 == 0) {
 				BlockPos top = new BlockPos(1 + (poured[0] % w), height, 1 + ((poured[0] / w) % w));
@@ -158,7 +176,8 @@ public class VesselsGameTests {
 					return;
 				}
 				System.out.println(String.format("[OCWO-VESSELS] %-34s BALANCED at tick %5d (surfaces %d / %d)", name, since[0] - start, l, r));
-				h.succeed();
+				if (drain) balancedAt[0] = t;
+				else h.succeed();
 			} else if (!pouring && Math.abs(l - r) > 1 && t - since[0] >= 200) {
 				System.out.println(String.format("[OCWO-VESSELS] %-34s STALLED since tick %5d (left %d, right %d)", name, since[0] - start, l, r));
 				StringBuilder sb = new StringBuilder();
@@ -176,7 +195,7 @@ public class VesselsGameTests {
 						+ in.columns() + " complete " + in.complete() + "; pressure queue "
 						+ io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).pressureQueueSize());
 				// would a step from the bottom of the left vessel move water right now?
-				int[] mv = new int[2];
+				int[] mv = new int[3];
 				io.github.nagsfov.ocwo.fluids.PressureSearch.Outcome o = io.github.nagsfov.ocwo.fluids.PressureSearch.step(level,
 						Fluids.WATER, h.absolutePos(new BlockPos(1, 1, 1)), new it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap(), 65_536,
 						new BlockPos.MutableBlockPos(), new it.unimi.dsi.fastutil.longs.LongOpenHashSet(),
@@ -263,6 +282,56 @@ public class VesselsGameTests {
 		}
 		h.succeed();
 	}
+
+	// large bodies of water next to the vessels (Valentin, 15/11/2026: vessels stuck in his world)
+
+	/** A lake of size x size, depth blocks of water, in obsidian, starting at z0 (beside the vessels). */
+	private static void lake(GameTestHelper h, int z0, int size, int depth) {
+		ServerLevel level = h.getLevel();
+		BlockState obsidian = Blocks.OBSIDIAN.defaultBlockState();
+		BlockState water = Blocks.WATER.defaultBlockState();
+		BlockState air = Blocks.AIR.defaultBlockState();
+		for (int x = 0; x <= size + 1; x++)
+			for (int z = z0; z <= z0 + size + 1; z++)
+				for (int y = 0; y <= depth + 1; y++) {
+					boolean inside = x >= 1 && x <= size && z > z0 && z <= z0 + size && y >= 1;
+					level.setBlock(h.absolutePos(new BlockPos(x, y, z)), inside ? (y <= depth ? water : air) : obsidian, Block.UPDATE_CLIENTS);
+				}
+	}
+
+	/** A player near the vessels and the lake: the slow check samples the water around them, as in game. */
+	private static void player(GameTestHelper h, int x, int z) {
+		net.minecraft.server.level.ServerPlayer p = h.makeMockServerPlayerInLevel();
+		BlockPos a = h.absolutePos(new BlockPos(x, 3, z));
+		p.teleportTo(a.getX() + 0.5, a.getY(), a.getZ() + 0.5);
+	}
+
+	/** Vessel next to a lake larger than the pressure search limit (72 x 72 = 5 184 columns), player around. */
+	@GameTest(environment = "ocwo-gametest:vessels_20", maxTicks = 8000, padding = 100)
+	public void nearLake(GameTestHelper h) {
+		lake(h, 9, 72, 3);
+		player(h, 8, 12);
+		run(h, "w5 h20 t1x1 l5 next to a lake", 5, 20, 1, 1, 5, 18, 0, false, 3000, true);
+	}
+
+	/** Same, while the lake keeps receiving water (a block every 2 ticks). */
+	@GameTest(environment = "ocwo-gametest:vessels_21", maxTicks = 8000, padding = 100)
+	public void nearLakeFilled(GameTestHelper h) {
+		lake(h, 9, 72, 3);
+		player(h, 8, 12);
+		int[] n = {0};
+		h.onEachTick(() -> {
+			if (h.getTick() % 2 != 0 || n[0] >= 2000) return;
+			BlockPos p = new BlockPos(2 + (n[0] * 7) % 68, 4, 12 + (n[0] * 13) % 68);
+			h.getLevel().setBlock(h.absolutePos(p), Blocks.WATER.defaultBlockState(), Block.UPDATE_ALL);
+			n[0]++;
+		});
+		run(h, "w5 h20 t1x1 l5 lake being filled", 5, 20, 1, 1, 5, 18, 0, false, 3000, false);
+	}
+
+	/** Small vessel alone: once balanced, its pressure entries must all go away. */
+	@GameTest(environment = "ocwo-gametest:vessels_22", maxTicks = 6000, padding = 40)
+	public void queueDrains(GameTestHelper h) { run(h, "w3 h10 t1x1 l5 queue drains", 3, 10, 1, 1, 5, 8, 0, false, Integer.MAX_VALUE, true); }
 
 	private static final class PressureSearchFalling {
 		static boolean is(FluidState fs) {

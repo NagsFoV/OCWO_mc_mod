@@ -61,8 +61,14 @@ public final class PressureSearch {
 		MOVED,
 		/** The whole body was explored and is balanced: the trigger can be dropped. */
 		BALANCED,
-		/** Saturated paths or incomplete search (body larger than the limit): retry later. */
-		BLOCKED
+		/** Saturated paths: retry later. */
+		BLOCKED,
+		/**
+		 * Body larger than the search limit (a lake, the sea) and nothing to move in the part explored: it cannot be
+		 * declared balanced, but retrying would only spend the quota of the others. The trigger is dropped and its
+		 * columns are left alone for a while (200 ticks), then the next trigger searches again.
+		 */
+		UNRESOLVED
 	}
 
 	private PressureSearch() {
@@ -292,13 +298,15 @@ public final class PressureSearch {
 	 * @param searched receives the keys of the columns explored (one search per body and per tick)
 	 * @param maxMoves at most this many levels are moved (the rest of the tick's quota)
 	 * @param flowMax  max speed-up of the flow (see {@link #flowMultiplier})
-	 * @param movedOut receives the number of levels moved in [0] and of blocks of water explored in [1]
+	 * @param movedOut receives the number of levels moved in [0], of blocks of water explored in [1], and in [2] 1 if the
+	 *                 whole body was explored
 	 */
 	public static Outcome step(ServerLevel world, FlowingFluid fluid, BlockPos trigger, Long2IntOpenHashMap usage,
 	                           int limit, BlockPos.MutableBlockPos lowSide, LongOpenHashSet balanced, LongOpenHashSet searched,
 	                           int maxMoves, int flowMax, int[] movedOut) {
 		movedOut[0] = 0;
 		movedOut[1] = 0;
+		movedOut[2] = 1;
 		if (limit <= 0) return Outcome.BALANCED;
 		if (!isStillFull(world.getFluidState(trigger), fluid)) return Outcome.BALANCED;
 		Search s = search(world, fluid, trigger, usage, limit);
@@ -306,6 +314,7 @@ public final class PressureSearch {
 		int cells = 0;
 		for (Column col : s.columns().values()) cells += col.capacity();
 		movedOut[1] = cells;
+		movedOut[2] = s.complete() ? 1 : 0;
 		PriorityQueue<Target> highs = new PriorityQueue<>(Comparator.comparingInt((Target t) -> -t.height));
 		PriorityQueue<Target> lows = new PriorityQueue<>(Comparator.comparingInt((Target t) -> t.height));
 		highs.addAll(s.highs());
@@ -376,7 +385,8 @@ public final class PressureSearch {
 			for (BlockPos t : touched) wakeAround(world, fluid, t);
 			return Outcome.MOVED;
 		}
-		if (saturated || !s.complete()) return Outcome.BLOCKED;
+		if (saturated) return Outcome.BLOCKED;
+		if (!s.complete()) return Outcome.UNRESOLVED;
 		// completely explored and balanced: its cells need no other step for a while
 		for (Column col : s.columns().values()) {
 			for (int y = col.yBot(); y <= col.yTop(); y++) balanced.add(BlockPos.asLong(col.x(), y, col.z()));
