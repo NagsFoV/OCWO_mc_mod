@@ -138,6 +138,12 @@ public class FabricPlatformHelper implements IPlatformHelper {
 	public void registerDebugPayload() {
 		net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry.clientboundPlay()
 				.register(io.github.nagsfov.ocwo.debug.DebugPayload.TYPE, io.github.nagsfov.ocwo.debug.DebugPayload.STREAM_CODEC);
+		net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry.serverboundPlay()
+				.register(io.github.nagsfov.ocwo.debug.DebugSubscribePayload.TYPE, io.github.nagsfov.ocwo.debug.DebugSubscribePayload.STREAM_CODEC);
+		net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.registerGlobalReceiver(io.github.nagsfov.ocwo.debug.DebugSubscribePayload.TYPE,
+				(payload, context) -> io.github.nagsfov.ocwo.debug.OcwoDebug.onSubscribe(context.player(), payload.mask()));
+		net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.DISCONNECT.register(
+				(handler, server) -> io.github.nagsfov.ocwo.debug.OcwoDebug.onPlayerLeft(handler.getPlayer().getUUID()));
 	}
 
 	@Override

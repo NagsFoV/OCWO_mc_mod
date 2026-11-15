@@ -31,11 +31,16 @@ gradlew.bat :fabric:runBlockDump       # extrait la liste des blocs dans tools/
 
 ## Débogage en jeu
 
-- `/ocwo debug` (opérateur ou triche activée) affiche ou masque, pour le joueur qui la tape, un panneau en haut à droite de l'écran, mis à jour toutes les 10 ticks :
-  - **Tête** : l'eau à hauteur des yeux (niveau sur 8, eau qui tombe, eau dans la couche fluide), la **pression** (profondeur sous la surface libre la plus haute de la masse d'eau, en blocs et en niveaux) et l'état de la masse (équilibrée, ou transferts de pression en attente avec la hauteur du point bas).
-  - **Bloc visé** : identifiant et orientation, eau dans la case, matériau, humidité (unités, niveaux, capacité, pourcentage, stade), perméabilité de chaque face, « retient l'eau », eau fixe, changement d'état prévu, simulé en ce moment ou au repos. Si le regard traverse de l'eau, son niveau est affiché aussi.
-  - **Monde** : coût du code de l'eau par tick (écoulement, pression, humidité), nombre de blocs humides actifs, taille de la file de pression, MSPT du serveur.
-- Les données sont calculées par le serveur et envoyées seulement aux joueurs qui ont activé le panneau (fonctionne aussi en multijoueur). Quand personne ne l'utilise, rien n'est calculé ni mesuré.
+Les informations d'OCWO sont dans l'écran de débogage du jeu (**F3**), sous forme de lignes comme celles de Minecraft. Trois entrées OCWO apparaissent dans la liste **F3+F6**, où l'on choisit pour chacune « toujours », « avec F3 » ou « jamais » :
+- **`ocwo_water_at_head`** (affichée avec F3 par défaut) : l'eau à hauteur des yeux (niveau sur 8, chute, couche fluide), la **pression** (profondeur sous la surface libre la plus haute de la masse d'eau, en blocs et en niveaux) et l'état de la masse (équilibrée, transferts en attente avec la hauteur du point bas, ou analyse incomplète).
+- **`ocwo_looking_at`** (affichée avec F3 par défaut) : identifiant et orientation du bloc visé, eau dans la case, matériau, humidité (unités, niveaux, capacité, pourcentage, stade), perméabilité de chaque face, « retient l'eau », eau fixe, changement d'état prévu, simulé en ce moment ou au repos. Si le regard traverse de l'eau, son niveau est affiché aussi.
+- **`ocwo_simulation`** (à activer dans F3+F6) : coût du code de l'eau par tick (écoulement, pression, humidité), blocs humides actifs, file de pression, MSPT du serveur, quotas actuels avec l'échelle de simulation, accélération maximale et budget en temps. Réservée aux opérateurs en multijoueur (et au propriétaire d'un monde solo).
+
+Fonctionnement :
+- Les données sont calculées par le serveur (la pression et l'humidité n'existent que là). Le client ne les demande que tant que F3 affiche au moins une entrée OCWO, et le serveur ne les envoie, toutes les 10 ticks, qu'à ces joueurs. Quand personne ne les regarde, rien n'est calculé ni mesuré.
+- Rien n'est envoyé si la règle de jeu `reducedDebugInfo` est activée.
+- Les textes sont traduits (français et anglais) ; les noms des entrées dans F3+F6 restent ceux de Minecraft, qui ne les traduit pas.
+- `/ocwo debug` rappelle seulement où trouver ces informations.
 - `/ocwo moisture [x y z]` donne le détail de l'humidité d'un bloc dans le chat ; `/ocwo moisture set <x y z> <unités>` la règle pour un essai.
 
 ## Documents de conception

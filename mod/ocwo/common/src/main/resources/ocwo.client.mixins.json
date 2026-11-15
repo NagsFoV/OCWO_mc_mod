@@ -15,6 +15,8 @@
 		"_fluids._layer.RenderSectionRegionFluidMixin",
 		"_fluids._layer.SectionCompilerFluidMixin",
 		"_fluids._layer.SectionCopyFluidMixin",
-		"_fluids.FluidCeilingRenderMixin"
+		"_fluids.FluidCeilingRenderMixin",
+		"_fluids._debug.DebugScreenEntriesInvoker",
+		"_fluids._debug.DebugScreenEntryListMixin"
 	]
 }
