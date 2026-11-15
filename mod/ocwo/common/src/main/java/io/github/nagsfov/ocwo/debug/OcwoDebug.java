@@ -86,8 +86,10 @@ public final class OcwoDebug {
 						.then(Commands.literal("info").then(Commands.argument("radius", com.mojang.brigadier.arguments.IntegerArgumentType.integer(0, 32))
 								.executes(ctx -> {
 									int r = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius");
-									int n = io.github.nagsfov.ocwo.fluids.WaterRest.awakeAround(ctx.getSource().getLevel(), BlockPos.containing(ctx.getSource().getPosition()), r);
-									ctx.getSource().sendSuccess(() -> Component.translatable("ocwo.water.info", n, r), false);
+									BlockPos at = BlockPos.containing(ctx.getSource().getPosition());
+									int n = io.github.nagsfov.ocwo.fluids.WaterRest.awakeAround(ctx.getSource().getLevel(), at, r);
+									long reserve = io.github.nagsfov.ocwo.fluids.WaterReserves.get(ctx.getSource().getLevel()).reserve(ctx.getSource().getLevel(), at);
+									ctx.getSource().sendSuccess(() -> Component.translatable("ocwo.water.info", n, r, reserve), false);
 									return n;
 								}))))
 				.then(Commands.literal("pressure")
@@ -179,6 +181,9 @@ public final class OcwoDebug {
 	private static void headWater(ServerLevel level, ServerPlayer player, List<String> out) {
 		Vec3 eye = player.getEyePosition();
 		BlockPos pos = BlockPos.containing(eye);
+		if (io.github.nagsfov.ocwo.fluids.WaterRest.enabled(level)) {
+			out.add(line("ocwo.debug.head.reserve", io.github.nagsfov.ocwo.fluids.WaterReserves.get(level).reserve(level, pos)));
+		}
 		FluidState fs = level.getFluidState(pos);
 		if (fs.isEmpty() || !(fs.getType() instanceof FlowingFluid)) {
 			out.add(line("ocwo.debug.head.none"));

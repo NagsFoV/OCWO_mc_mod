@@ -108,29 +108,49 @@ public class CheckRestGameTests {
 		build(h);
 		ServerLevel level = h.getLevel();
 		long start = total(h);
+		BlockPos poolA = h.absolutePos(new BlockPos(3, 1, 3));
+		long[] reserve0 = {0};
 		h.runAfterDelay(5, () -> {
+			reserve0[0] = io.github.nagsfov.ocwo.fluids.WaterReserves.get(level).reserve(level, poolA);
 			// the player opens the wall between pool A and the sealed pocket
 			level.setBlock(h.absolutePos(new BlockPos(3, 1, 6)), Blocks.AIR.defaultBlockState(), 3);
 		});
-		long[] last = {start};
-		h.onEachTick(() -> {
-			long now = total(h);
-			if (now != last[0]) {
-				StringBuilder sb = new StringBuilder();
-				for (int x = 0; x <= 6; x++) { sb.append(" x").append(x).append(':'); for (int z = 0; z <= 6; z++) sb.append(level(h, x, 1, z)).append(level(h, x, 2, z) > 0 ? "+" + level(h, x, 2, z) : "").append(','); }
-				System.out.println("[OCWO-TEST] rest total " + last[0] + " -> " + now + " at " + h.getTick() + sb);
-				last[0] = now;
-			}
-		});
 		h.runAfterDelay(300, () -> {
-			if (total(h) != start) h.fail("water not conserved: " + start + " -> " + total(h));
-			// pool A woke up and filled its hole and the new pocket
-			if (level(h, 3, 1, 7) == 0) h.fail("pool A did not wake up (pocket still empty)");
+			long reserve = io.github.nagsfov.ocwo.fluids.WaterReserves.get(level).reserve(level, poolA);
+			long visible = total(h);
+			// exact conservation: visible water plus the zone's reserve
+			if (visible + reserve != start + reserve0[0]) h.fail("water not conserved: " + (start + reserve0[0]) + " -> " + (visible + reserve)
+					+ " (visible " + start + " -> " + visible + ", reserve " + reserve0[0] + " -> " + reserve + ")");
+			// the pocket filled from pool A, which is natural water at rest: it kept its level, the reserve paid
+			if (level(h, 3, 1, 7) == 0) h.fail("the pocket did not fill");
+			if (level(h, 2, 1, 2) != 8 || level(h, 2, 2, 2) != 8) h.fail("natural water lost its level (reservoir)");
+			if (reserve >= reserve0[0]) h.fail("the reserve did not pay for the pocket (" + reserve0[0] + " -> " + reserve + ")");
 			// pool B, never touched, is still at rest with its hole empty
 			if (!WaterRest.isResting(level, h.absolutePos(new BlockPos(13, 1, 2)))) h.fail("pool B woke up");
 			if (level(h, 16, 1, 5) != 0) h.fail("pool B flowed");
-			int awake = WaterRest.awakeAround(level, h.absolutePos(new BlockPos(3, 1, 3)), 2);
-			System.out.println("[OCWO-TEST] rest: " + awake + " awake water blocks after the disturbance (pool A has 48)");
+			int awake = WaterRest.awakeAround(level, poolA, 2);
+			System.out.println("[OCWO-TEST] rest: " + awake + " awake water blocks after the disturbance, reserve " + reserve0[0] + " -> " + reserve);
+			h.succeed();
+		});
+	}
+
+	/** Water placed by a player (awake) goes back to rest once it has stopped moving, and stays real water. */
+	@GameTest(maxTicks = 600, padding = 32)
+	public void awakeWaterGoesBackToRest(GameTestHelper h) {
+		ServerLevel level = h.getLevel();
+		BlockState obs = Blocks.OBSIDIAN.defaultBlockState(), water = Blocks.WATER.defaultBlockState();
+		for (int x = 0; x <= 6; x++)
+			for (int z = 0; z <= 6; z++)
+				for (int y = 0; y <= 3; y++) {
+					boolean inside = x >= 1 && x <= 5 && z >= 1 && z <= 5 && y >= 1;
+					level.setBlock(h.absolutePos(new BlockPos(x, y, z)), inside ? (y <= 2 ? water : Blocks.AIR.defaultBlockState()) : obs, 3);
+				}
+		h.runAfterDelay(10, () -> {
+			if (WaterRest.isResting(level, h.absolutePos(new BlockPos(3, 1, 3)))) h.fail("placed water should be awake");
+		});
+		h.runAfterDelay(400, () -> {
+			if (!WaterRest.isResting(level, h.absolutePos(new BlockPos(3, 1, 3)))) h.fail("still awake after 400 ticks without moving");
+			if (WaterRest.isNatural(level, h.absolutePos(new BlockPos(3, 1, 3)))) h.fail("placed water must not be natural (no reservoir)");
 			h.succeed();
 		});
 	}

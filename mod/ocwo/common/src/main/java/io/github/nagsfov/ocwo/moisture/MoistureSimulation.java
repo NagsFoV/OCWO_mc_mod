@@ -184,7 +184,7 @@ public final class MoistureSimulation {
 				}
 				for (Direction d : Direction.values()) {
 					m.setWithOffset(p, d);
-					if (level.isLoaded(m) && isWater(level.getFluidState(m)) && !io.github.nagsfov.ocwo.fluids.WaterRest.isResting(level, m)) {
+					if (level.isLoaded(m) && isWater(level.getFluidState(m)) && !io.github.nagsfov.ocwo.fluids.WaterRest.isInert(level, m)) {
 						active.add(p.asLong());
 						break;
 					}
@@ -244,7 +244,7 @@ public final class MoistureSimulation {
 			if (!level.isLoaded(n)) continue;
 			FluidState fs = level.getFluidState(n);
 			if (!isWater(fs)) continue;
-			if (io.github.nagsfov.ocwo.fluids.WaterRest.isResting(level, n)) continue; // water at rest is not absorbed
+			if (io.github.nagsfov.ocwo.fluids.WaterRest.isInert(level, n)) continue; // water at rest is not absorbed
 			waterAround = true;
 			if (d != Direction.DOWN) supply = true;
 			int perm = props.permeability(state, d);

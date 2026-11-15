@@ -126,6 +126,16 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		return bodies;
 	}
 
+	/** Chunks that hold awake water (see WaterRest), in order. */
+	private final it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet awakeChunks = new it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet();
+
+	public it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet awakeChunks() {
+		return awakeChunks;
+	}
+
+	/** Awake blocks put back at rest by the last sweep (diagnostics). */
+	public int lastSlept;
+
 	public int lastDeferred() {
 		return lastDeferred;
 	}
@@ -176,7 +186,7 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 						random.nextInt(PRESSURE_SAMPLE_RADIUS * 2 + 1) - PRESSURE_SAMPLE_RADIUS);
 				if (!world.isLoaded(p)) continue;
 				var fs = world.getFluidState(p);
-				if (fs.getType() instanceof FlowingFluid ff && PressureSearch.isStillFull(fs, ff) && !WaterRest.isResting(world, p)) bodies.trigger(p);
+				if (fs.getType() instanceof FlowingFluid ff && PressureSearch.isStillFull(fs, ff) && !WaterRest.isInert(world, p)) bodies.trigger(p);
 			}
 		}
 	}
@@ -245,9 +255,14 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		blockUpdateCounter = 0;
 		// every flow task due at this tick (no limit), except for water at rest
 		final boolean rest = WaterRest.enabled(world);
-		super.tick(time, Integer.MAX_VALUE, rest ? (pos, fluid) -> {
-			if (!WaterRest.isResting(world, pos)) biConsumer.accept(pos, fluid);
-		} : biConsumer);
+		WaterRest.simulating(true);
+		try {
+			super.tick(time, Integer.MAX_VALUE, rest ? (pos, fluid) -> {
+				if (!WaterRest.isResting(world, pos)) biConsumer.accept(pos, fluid);
+			} : biConsumer);
+		} finally {
+			WaterRest.simulating(false);
+		}
 		ProfilerFiller profiler = Profiler.get();
 
 		long d1 = debug ? System.nanoTime() : 0L;
@@ -270,16 +285,24 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		profiler.popPush("fluid equalization");
 		// every equalization task queued before this pass (the ones they queue are for the next tick)
 		long equalizationTaskCounter = 0;
-		for (int n = equalizationQueue.size(); n > 0; n--) {
-			EqualizationFluidTask task = equalizationQueue.pollFirst();
-			if (task == null) break;
-			if (equalizationSet.remove(task.pos)) {
-				if (!equalizationBlacklistSet.containsKey(task.pos.asLong())) {
-					task.run();
-					equalizationTaskCounter++;
+		WaterRest.simulating(true);
+		try {
+			for (int n = equalizationQueue.size(); n > 0; n--) {
+				EqualizationFluidTask task = equalizationQueue.pollFirst();
+				if (task == null) break;
+				if (equalizationSet.remove(task.pos)) {
+					if (!equalizationBlacklistSet.containsKey(task.pos.asLong())) {
+						task.run();
+						equalizationTaskCounter++;
+					}
 				}
 			}
+		} finally {
+			WaterRest.simulating(false);
 		}
+		// awake water that has stopped moving goes back to rest
+		int slept = WaterRest.sleepSweep(world);
+		if (world.getGameTime() % 20 == 0) lastSlept = slept;
 		if (FluidUtils.FLUID_CHUNK_LAYER && !updatedFluidOverrides.isEmpty()) {
 			profiler.popPush("updating fluid chunks");
 			for (ChunkAccess ca : updatedFluidOverrides) {

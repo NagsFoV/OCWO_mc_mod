@@ -37,7 +37,7 @@ public class CheckDebugGameTests {
 			check(h, p.block(), "block");
 			// a mock player is no operator: the simulation group only says so
 			if (!p.sim().equals(List.of("ocwo.debug.sim.operators"))) h.fail("simulation group for a non operator: " + p.sim());
-			if (!p.head().getFirst().startsWith("ocwo.debug.head.fluid")) h.fail("head in water expected: " + p.head());
+			if (p.head().stream().noneMatch(l -> l.startsWith("ocwo.debug.head.fluid"))) h.fail("head in water expected: " + p.head());
 			// only the requested groups are computed
 			DebugPayload onlyHead = OcwoDebug.build(h.getLevel(), player, DebugSubscribePayload.HEAD);
 			if (onlyHead.head().isEmpty() || !onlyHead.block().isEmpty() || !onlyHead.sim().isEmpty()) h.fail("groups not filtered");

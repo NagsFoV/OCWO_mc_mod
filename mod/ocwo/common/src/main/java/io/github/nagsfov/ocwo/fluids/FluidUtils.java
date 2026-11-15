@@ -620,6 +620,8 @@ public final class FluidUtils {
 
 	public static void setFluid(Level world, BlockPos to, BlockState toState, FluidState toFs, FlowingFluid fluid, FluidState fs, boolean update) {
 		if (fs == toFs) return;
+		// water at rest keeps its level: the zone's reserve takes the difference (see WaterRest)
+		if (!world.isClientSide() && WaterRest.absorbByReserve((ServerLevel) world, to, toFs, fs)) return;
 		int flags = Block.UPDATE_CLIENTS
 				| Block.UPDATE_SKIP_SHAPE_UPDATE_ON_WIRE | Block.UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS;
 		if (update) {
@@ -637,7 +639,7 @@ public final class FluidUtils {
 			}
 			if (!world.isClientSide()) {
 				CustomFluidTicks.get(world).fluidLayerUpdate(ca, to);
-				WaterRest.wakeAround((ServerLevel) world, to);
+				WaterRest.onFluidChanged((ServerLevel) world, to);
 				CustomFluidTicks.get(world).onBlockChanged(to);
 				Fluid updateFluid = fluid;
 				if (fs.isEmpty()) {

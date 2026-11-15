@@ -219,7 +219,7 @@ public final class WaterBodies {
 	}
 
 	private boolean isFullCell(BlockPos p, FlowingFluid fluid) {
-		return usable(p) && PressureSearch.isStillFull(world.getFluidState(p), fluid) && !WaterRest.isResting(world, p);
+		return usable(p) && PressureSearch.isStillFull(world.getFluidState(p), fluid) && !WaterRest.isInert(world, p);
 	}
 
 	/** Vertical run of full blocks through {@code y} (none: null). */
@@ -599,7 +599,7 @@ public final class WaterBodies {
 	 */
 	private int targetHeight(BlockPos pos, Col c, boolean high) {
 		if (c.removed || !usable(pos)) return Integer.MIN_VALUE;
-		if (WaterRest.isResting(world, pos)) return Integer.MIN_VALUE; // water at rest: a wall
+		if (WaterRest.isInert(world, pos)) return Integer.MIN_VALUE; // water at rest: a wall
 		FlowingFluid fluid = c.fluid;
 		int px = pos.getX(), py = pos.getY(), pz = pos.getZ();
 		if (px == c.x && pz == c.z) {
@@ -876,6 +876,18 @@ public final class WaterBodies {
 		int n = pendingCount();
 		for (Body b : work) if (!b.removed && b.processedTick != now) n++;
 		return n;
+	}
+
+	/** Is there a body with work in the column of pos or in a column next to it? (water at rest, going back to rest) */
+	public boolean hasWorkAround(BlockPos pos) {
+		Col c = colAt(pos.getX(), pos.getY(), pos.getZ());
+		if (c != null && c.body != null && work.contains(c.body)) return true;
+		for (Direction d : ALL_DIRS) {
+			BlockPos n = pos.relative(d);
+			Col o = colAt(n.getX(), n.getY(), n.getZ());
+			if (o != null && o.body != null && work.contains(o.body)) return true;
+		}
+		return false;
 	}
 
 	/** Bodies with work that have a column inside the box (tests). */
