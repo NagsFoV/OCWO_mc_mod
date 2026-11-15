@@ -210,6 +210,8 @@ public final class FluidUtils {
 	}
 
 	public static void handleFluidTick(FlowingFluid ff, ServerLevel world, BlockPos blockPos, BlockState blockState, FluidState fluidState) {
+		// water at rest gets no flow task, whoever asks (scheduled tick, end of the world generation...)
+		if (WaterRest.isResting(world, blockPos)) return;
 		new ClassicFlowTask(world, blockPos, ff, blockState, fluidState).run();
 	}
 
@@ -635,6 +637,7 @@ public final class FluidUtils {
 			}
 			if (!world.isClientSide()) {
 				CustomFluidTicks.get(world).fluidLayerUpdate(ca, to);
+				WaterRest.wakeAround((ServerLevel) world, to);
 				CustomFluidTicks.get(world).onBlockChanged(to);
 				Fluid updateFluid = fluid;
 				if (fs.isEmpty()) {

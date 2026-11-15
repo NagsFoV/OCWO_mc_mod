@@ -24,7 +24,9 @@
 		"_fluids.tweaks.LiquidBlockMixin",
 		"_fluids.tweaks.PistonBaseBlockMixin",
 		"_fluids.tweaks.PointedDripstoneBlockMixin",
-		"_fluids.FlowingFluidCeilingMixin"
+		"_fluids.FlowingFluidCeilingMixin",
+		"GameRuleMapMixin",
+		"_fluids.LevelChunkRestMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

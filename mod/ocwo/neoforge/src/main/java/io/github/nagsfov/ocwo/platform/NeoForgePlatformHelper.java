@@ -101,6 +101,21 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
 	}
 
 	@Override
+	public void registerWakeLayer() {
+		throw todo();
+	}
+
+	@Override
+	public io.github.nagsfov.ocwo.fluids.WakeLayer getWakeLayer(net.minecraft.world.level.chunk.ChunkAccess chunk) {
+		throw todo();
+	}
+
+	@Override
+	public io.github.nagsfov.ocwo.fluids.WakeLayer getOrCreateWakeLayer(net.minecraft.world.level.chunk.ChunkAccess chunk) {
+		throw todo();
+	}
+
+	@Override
 	public void registerDebugPayload() {
 		throw todo();
 	}

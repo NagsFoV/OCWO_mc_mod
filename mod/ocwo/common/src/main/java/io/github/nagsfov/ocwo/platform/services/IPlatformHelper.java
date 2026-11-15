@@ -57,6 +57,13 @@ public interface IPlatformHelper {
 
 	void registerMoistureLayer();
 
+	/** Awake water of a chunk (see WaterRest), saved with the chunk. */
+	void registerWakeLayer();
+
+	io.github.nagsfov.ocwo.fluids.WakeLayer getWakeLayer(ChunkAccess chunk);
+
+	io.github.nagsfov.ocwo.fluids.WakeLayer getOrCreateWakeLayer(ChunkAccess chunk);
+
 	@Nullable
 	MoistureLayer getMoistureLayer(ChunkAccess chunk);
 

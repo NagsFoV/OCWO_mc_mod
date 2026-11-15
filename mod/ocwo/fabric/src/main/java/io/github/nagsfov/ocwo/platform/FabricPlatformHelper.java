@@ -35,6 +35,7 @@ public class FabricPlatformHelper implements IPlatformHelper {
 
 	private static AttachmentType<FluidLayer> fluidLayerType;
 	private static AttachmentType<MoistureLayer> moistureLayerType;
+	private static AttachmentType<io.github.nagsfov.ocwo.fluids.WakeLayer> wakeLayerType;
 
 	@Override
 	public String getPlatformName() {
@@ -118,6 +119,22 @@ public class FabricPlatformHelper implements IPlatformHelper {
 	@Override
 	public MoistureLayer getOrCreateMoistureLayer(ChunkAccess chunk) {
 		return chunk.getAttachedOrCreate(moistureLayerType);
+	}
+
+	@Override
+	public void registerWakeLayer() {
+		wakeLayerType = AttachmentRegistry.create(io.github.nagsfov.ocwo.fluids.WakeLayer.ID,
+				builder -> builder.initializer(io.github.nagsfov.ocwo.fluids.WakeLayer::new).persistent(io.github.nagsfov.ocwo.fluids.WakeLayer.CODEC));
+	}
+
+	@Override
+	public io.github.nagsfov.ocwo.fluids.WakeLayer getWakeLayer(ChunkAccess chunk) {
+		return wakeLayerType == null ? null : chunk.getAttached(wakeLayerType);
+	}
+
+	@Override
+	public io.github.nagsfov.ocwo.fluids.WakeLayer getOrCreateWakeLayer(ChunkAccess chunk) {
+		return chunk.getAttachedOrCreate(wakeLayerType);
 	}
 
 	// ---- Data and commands ----

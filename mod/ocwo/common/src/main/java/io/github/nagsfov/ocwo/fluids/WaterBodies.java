@@ -219,7 +219,7 @@ public final class WaterBodies {
 	}
 
 	private boolean isFullCell(BlockPos p, FlowingFluid fluid) {
-		return usable(p) && PressureSearch.isStillFull(world.getFluidState(p), fluid);
+		return usable(p) && PressureSearch.isStillFull(world.getFluidState(p), fluid) && !WaterRest.isResting(world, p);
 	}
 
 	/** Vertical run of full blocks through {@code y} (none: null). */
@@ -599,6 +599,7 @@ public final class WaterBodies {
 	 */
 	private int targetHeight(BlockPos pos, Col c, boolean high) {
 		if (c.removed || !usable(pos)) return Integer.MIN_VALUE;
+		if (WaterRest.isResting(world, pos)) return Integer.MIN_VALUE; // water at rest: a wall
 		FlowingFluid fluid = c.fluid;
 		int px = pos.getX(), py = pos.getY(), pz = pos.getZ();
 		if (px == c.x && pz == c.z) {

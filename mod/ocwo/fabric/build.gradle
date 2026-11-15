@@ -25,6 +25,8 @@ loom {
             setConfigName('Fabric Server')
             ideConfigGenerated(true)
             runDir('runs/server')
+            // diagnostics, for example -Docwo.serverArgs=-Docwo.traceWake=5000
+            vmArg System.getProperty('ocwo.serverArgs', '-Docwo.none=1')
         }
     }
 }

@@ -38,5 +38,10 @@
 	"gamerule.ocwo.water_pressure": "Pression de l'eau",
 	"gamerule.ocwo.water_pressure.description": "Pression hydraulique : les vases communicants s'équilibrent, les tunnels se remplissent, l'eau remonte en fontaine",
 	"gamerule.ocwo.water_simulation_distance": "Distance de simulation de l'eau (chunks)",
-	"gamerule.ocwo.water_simulation_distance.description": "Distance autour des joueurs où l'eau est simulée (écoulement, pression, humidité), en chunks. -1 = la distance de simulation du serveur. Au-delà, l'eau est figée, sans rien perdre. Chaque tick fait tout le travail de l'eau dans cette zone : baissez-la si le jeu rame"
+	"gamerule.ocwo.water_simulation_distance.description": "Distance autour des joueurs où l'eau est simulée (écoulement, pression, humidité), en chunks. -1 = la distance de simulation du serveur. Au-delà, l'eau est figée, sans rien perdre. Chaque tick fait tout le travail de l'eau dans cette zone : baissez-la si le jeu rame",
+	"ocwo.debug.flag.resting": "au repos",
+	"ocwo.water.rest": "%s blocs d'eau réveillés remis au repos dans un rayon de %s chunks",
+	"ocwo.water.info": "%s blocs d'eau réveillés dans un rayon de %s chunks (toute l'autre eau est au repos)",
+	"gamerule.ocwo.water_rest": "Eau au repos",
+	"gamerule.ocwo.water_rest.description": "L'eau de la génération du monde n'est pas simulée (écoulement, pression, humidité) tant que rien ne la dérange : un bloc modifié à côté la réveille, et le réveil s'étend aussi loin que l'eau bouge"
 }

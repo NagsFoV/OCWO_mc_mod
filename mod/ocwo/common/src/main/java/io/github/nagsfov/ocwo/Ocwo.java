@@ -38,6 +38,8 @@ public final class Ocwo {
 			}
 			// Block moisture (03-humidite-et-etats-des-blocs.md)
 			Services.PLATFORM.registerMoistureLayer();
+			// Water at rest (06-pression.md): awake water saved with the chunk
+			Services.PLATFORM.registerWakeLayer();
 			Services.PLATFORM.registerServerReloadListener(MoistureData.RELOAD_ID, MoistureData.LISTENER);
 			Services.PLATFORM.registerCommands(MoistureCommand::register);
 			// OCWO lines of the F3 debug screen (/ocwo debug only points there)

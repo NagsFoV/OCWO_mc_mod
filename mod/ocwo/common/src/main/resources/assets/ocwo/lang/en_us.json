@@ -51,5 +51,10 @@
 	"gamerule.ocwo.water_pressure": "Water pressure",
 	"gamerule.ocwo.water_pressure.description": "Hydraulic pressure: connected vessels reach the same level, tunnels fill completely, water rises in fountains",
 	"gamerule.ocwo.water_simulation_distance": "Water simulation distance (chunks)",
-	"gamerule.ocwo.water_simulation_distance.description": "Distance around players where water is simulated (flow, pressure, moisture), in chunks. -1 = the server simulation distance. Beyond it, water is frozen and nothing is lost. Every tick does all the water work in this area: lower it if the game lags"
+	"gamerule.ocwo.water_simulation_distance.description": "Distance around players where water is simulated (flow, pressure, moisture), in chunks. -1 = the server simulation distance. Beyond it, water is frozen and nothing is lost. Every tick does all the water work in this area: lower it if the game lags",
+	"ocwo.debug.flag.resting": "at rest",
+	"ocwo.water.rest": "%s awake water blocks put back at rest within %s chunks",
+	"ocwo.water.info": "%s awake water blocks within %s chunks (all other water is at rest)",
+	"gamerule.ocwo.water_rest": "Water at rest",
+	"gamerule.ocwo.water_rest.description": "The water of the world generation is not simulated (flow, pressure, moisture) until something disturbs it: a block changed next to it wakes it up, and the awakening spreads as far as the water moves"
 }

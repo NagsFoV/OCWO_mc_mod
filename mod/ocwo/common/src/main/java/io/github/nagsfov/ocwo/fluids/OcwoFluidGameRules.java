@@ -30,6 +30,10 @@ public class OcwoFluidGameRules {
 	public static final GameRule<Boolean> RAIN_MOISTURE_TEST = enabled()
 			? Services.PLATFORM.registerBooleanRule("rain_moisture_test", false) : null;
 
+	/** Water at rest: the water of the world generation is not simulated until something disturbs it. */
+	public static final GameRule<Boolean> WATER_REST = enabled()
+			? Services.PLATFORM.registerBooleanRule("water_rest", true) : null;
+
 	/** Hydraulic pressure (communicating vessels, tunnels that fill up...). See 06-pression.md. */
 	public static final GameRule<Boolean> WATER_PRESSURE = enabled()
 			? Services.PLATFORM.registerBooleanRule("water_pressure", true) : null;

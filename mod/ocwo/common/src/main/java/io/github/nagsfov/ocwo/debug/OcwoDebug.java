@@ -74,6 +74,22 @@ public final class OcwoDebug {
 							ctx.getSource().sendSuccess(() -> Component.translatable("ocwo.debug.command"), false);
 							return 1;
 						}))
+				.then(Commands.literal("water")
+						.requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+						.then(Commands.literal("rest").then(Commands.argument("radius", com.mojang.brigadier.arguments.IntegerArgumentType.integer(0, 32))
+								.executes(ctx -> {
+									int r = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius");
+									int n = io.github.nagsfov.ocwo.fluids.WaterRest.restAround(ctx.getSource().getLevel(), BlockPos.containing(ctx.getSource().getPosition()), r);
+									ctx.getSource().sendSuccess(() -> Component.translatable("ocwo.water.rest", n, r), true);
+									return n;
+								})))
+						.then(Commands.literal("info").then(Commands.argument("radius", com.mojang.brigadier.arguments.IntegerArgumentType.integer(0, 32))
+								.executes(ctx -> {
+									int r = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius");
+									int n = io.github.nagsfov.ocwo.fluids.WaterRest.awakeAround(ctx.getSource().getLevel(), BlockPos.containing(ctx.getSource().getPosition()), r);
+									ctx.getSource().sendSuccess(() -> Component.translatable("ocwo.water.info", n, r), false);
+									return n;
+								}))))
 				.then(Commands.literal("pressure")
 						.requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
 						.then(Commands.literal("queue")
@@ -152,6 +168,7 @@ public final class OcwoDebug {
 		String f = "";
 		if (PressureSearch.isFalling(fs)) f += key("ocwo.debug.flag.falling");
 		if (inFluidLayer(level, pos)) f += (f.isEmpty() ? "" : "+") + key("ocwo.debug.flag.layer");
+		if (io.github.nagsfov.ocwo.fluids.WaterRest.isResting(level, pos)) f += (f.isEmpty() ? "" : "+") + key("ocwo.debug.flag.resting");
 		return f;
 	}
 

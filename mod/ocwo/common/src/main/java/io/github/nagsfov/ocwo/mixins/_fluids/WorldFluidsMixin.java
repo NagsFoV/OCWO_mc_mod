@@ -54,6 +54,7 @@ public abstract class WorldFluidsMixin {
 		if (!isClientSide() && oldState != null) {
 			io.github.nagsfov.ocwo.fluids.CustomFluidTicks ticks = io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get((Level) (Object) this);
 			ticks.moisture().onBlockChanged(blockPos, oldState, blockState);
+			io.github.nagsfov.ocwo.fluids.WaterRest.onBlockChanged((net.minecraft.server.level.ServerLevel) (Object) this, blockPos, oldState, blockState);
 			ticks.onBlockChanged(blockPos);
 		}
 		//noinspection ConstantValue

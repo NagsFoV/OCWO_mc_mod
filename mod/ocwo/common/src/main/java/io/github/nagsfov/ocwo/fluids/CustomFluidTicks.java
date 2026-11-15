@@ -176,7 +176,7 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 						random.nextInt(PRESSURE_SAMPLE_RADIUS * 2 + 1) - PRESSURE_SAMPLE_RADIUS);
 				if (!world.isLoaded(p)) continue;
 				var fs = world.getFluidState(p);
-				if (fs.getType() instanceof FlowingFluid ff && PressureSearch.isStillFull(fs, ff)) bodies.trigger(p);
+				if (fs.getType() instanceof FlowingFluid ff && PressureSearch.isStillFull(fs, ff) && !WaterRest.isResting(world, p)) bodies.trigger(p);
 			}
 		}
 	}
@@ -243,8 +243,11 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		taskCounter = 0;
 		blockReadCounter = 0;
 		blockUpdateCounter = 0;
-		// every flow task due at this tick (no limit)
-		super.tick(time, Integer.MAX_VALUE, biConsumer);
+		// every flow task due at this tick (no limit), except for water at rest
+		final boolean rest = WaterRest.enabled(world);
+		super.tick(time, Integer.MAX_VALUE, rest ? (pos, fluid) -> {
+			if (!WaterRest.isResting(world, pos)) biConsumer.accept(pos, fluid);
+		} : biConsumer);
 		ProfilerFiller profiler = Profiler.get();
 
 		long d1 = debug ? System.nanoTime() : 0L;
