@@ -1,7 +1,9 @@
 package io.github.nagsfov.ocwo.gametest;
 
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.world.level.block.Blocks;
 
 /**
  * OCWO performance scenarios: a lake drained into a basement, measuring the time spent in our water code.
@@ -36,6 +38,55 @@ public class PerformanceGameTests {
 		DrainScenario.Run run = new DrainScenario.Run(h, bigLake(), "bigLake (pressure off, PhysEx only)", MAX_DRAIN_TICKS, true);
 		run.failWhenSlow = false;
 		run.start();
+	}
+
+	/**
+	 * Vessels next to the 32x32x8 lake while it drains (Valentin, 15/11/2026): a 5x5x20 vessel, full, joined by a
+	 * 1x1 tunnel to an empty one, beside the pool. Reports the water code time and when the vessels balanced.
+	 */
+	@GameTest(environment = "ocwo-gametest:perf_mid_vessel", maxTicks = 9_000, padding = 32)
+	public void midLakeVessel(GameTestHelper h) {
+		DrainScenario.Pool pool = midLake();
+		DrainScenario.Run run = new DrainScenario.Run(h, pool, "midLake with vessels (pressure on)", MAX_DRAIN_TICKS, true);
+		run.failWhenSlow = false;
+		int x0 = 2, z0 = pool.size() + 6, w = 5, height = 20, len = 5;
+		net.minecraft.server.level.ServerLevel level = h.getLevel();
+		int xR = x0 + w + len + 1;
+		for (int x = x0 - 1; x <= xR + w; x++)
+			for (int z = 0; z <= w + 1; z++)
+				for (int y = 0; y <= height + 1; y++) {
+					boolean inZ = z >= 1 && z <= w;
+					boolean left = x >= x0 && x < x0 + w && inZ && y >= 1;
+					boolean right = x >= xR && x < xR + w && inZ && y >= 1;
+					boolean tunnel = x >= x0 + w && x < xR && z == 3 && y == 1;
+					net.minecraft.world.level.block.state.BlockState st = Blocks.OBSIDIAN.defaultBlockState();
+					if (left) st = y <= height - 2 ? Blocks.WATER.defaultBlockState() : Blocks.AIR.defaultBlockState();
+					else if (right || tunnel) st = Blocks.AIR.defaultBlockState();
+					level.setBlock(h.absolutePos(new BlockPos(x, y, z0 + z)), st, net.minecraft.world.level.block.Block.UPDATE_CLIENTS);
+				}
+		level.scheduleTick(h.absolutePos(new BlockPos(x0 + w - 1, 1, z0 + 3)), net.minecraft.world.level.material.Fluids.WATER, 1);
+		long start = h.getTick();
+		boolean[] done = {false};
+		h.onEachTick(() -> {
+			if (done[0] || (h.getTick() - start) % 10 != 0) return;
+			int l = top(h, x0, z0, w, height), r = top(h, xR, z0, w, height);
+			if (l >= 0 && r >= 0 && Math.abs(l - r) <= 1) {
+				done[0] = true;
+				System.out.println("[OCWO-TEST] midLake with vessels: vessels balanced at tick " + (h.getTick() - start));
+			}
+		});
+		run.start();
+	}
+
+	private static int top(GameTestHelper h, int x0, int z0, int w, int height) {
+		int best = -1;
+		for (int x = x0; x < x0 + w; x++)
+			for (int z = 1; z <= w; z++)
+				for (int y = height; y >= 1; y--) {
+					var fs = h.getLevel().getFluidState(h.absolutePos(new BlockPos(x, y, z0 + z)));
+					if (!fs.isEmpty()) { best = Math.max(best, y * 8 + fs.getAmount()); break; }
+				}
+		return best;
 	}
 
 	/** Realistic case: must stay under 10 ms per tick on average and 50 ms on the worst tick. */
