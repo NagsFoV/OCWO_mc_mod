@@ -11,6 +11,7 @@
 			"io.github.nagsfov.ocwo.gametest.CheckMoistureGameTests",
 			"io.github.nagsfov.ocwo.gametest.CheckDebugGameTests",
 			"io.github.nagsfov.ocwo.gametest.CheckRestGameTests",
+			"io.github.nagsfov.ocwo.gametest.CheckMoistureRandomGameTests",
 			"io.github.nagsfov.ocwo.gametest.PerformanceGameTests",
 			"io.github.nagsfov.ocwo.gametest.ToolsGameTests",
 			"io.github.nagsfov.ocwo.gametest.VesselsGameTests"

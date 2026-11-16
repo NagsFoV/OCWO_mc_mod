@@ -1,0 +1,6 @@
+{
+  "type": "minecraft:game_rules",
+  "rules": {
+    "ocwo:moisture_random_ticks": 48
+  }
+}

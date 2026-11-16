@@ -26,7 +26,8 @@
 		"_fluids.tweaks.PointedDripstoneBlockMixin",
 		"_fluids.FlowingFluidCeilingMixin",
 		"GameRuleMapMixin",
-		"_fluids.LevelChunkRestMixin"
+		"_fluids.LevelChunkRestMixin",
+		"_fluids.ServerLevelMoistureMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

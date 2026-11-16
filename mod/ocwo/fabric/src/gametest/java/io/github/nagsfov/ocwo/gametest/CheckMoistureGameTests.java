@@ -69,7 +69,7 @@ public class CheckMoistureGameTests {
 	// ------------------------------------------------------------------ scenarios
 
 	/** A cobblestone wall soaks up the pool and seeps into the dry chamber behind it. */
-	@GameTest(maxTicks = 3000, padding = 24)
+	@GameTest(environment = "ocwo-gametest:moisture_fast", maxTicks = 3000, padding = 24)
 	public void cobblestoneWallSeeps(GameTestHelper h) {
 		poolAndWall(h, Blocks.COBBLESTONE.defaultBlockState());
 		conservation(h, 8, 6, 4);
@@ -82,7 +82,7 @@ public class CheckMoistureGameTests {
 	}
 
 	/** Wool retains its water: it soaks it up but never seeps. */
-	@GameTest(maxTicks = 1400, padding = 24)
+	@GameTest(environment = "ocwo-gametest:moisture_fast", maxTicks = 1400, padding = 24)
 	public void woolRetainsWater(GameTestHelper h) {
 		poolAndWall(h, Blocks.WOOL.white().defaultBlockState());
 		conservation(h, 8, 6, 4);
@@ -97,7 +97,7 @@ public class CheckMoistureGameTests {
 	}
 
 	/** Obsidian (watertight rock) takes no water and lets none through. */
-	@GameTest(maxTicks = 800, padding = 24)
+	@GameTest(environment = "ocwo-gametest:moisture_fast", maxTicks = 800, padding = 24)
 	public void obsidianIsWatertight(GameTestHelper h) {
 		poolAndWall(h, Blocks.OBSIDIAN.defaultBlockState());
 		conservation(h, 8, 6, 4);
@@ -110,7 +110,7 @@ public class CheckMoistureGameTests {
 	}
 
 	/** Dirt under a pool gets wet and turns into mud (at the "mouille" stage). */
-	@GameTest(maxTicks = 3000, padding = 24)
+	@GameTest(environment = "ocwo-gametest:moisture_fast", maxTicks = 3000, padding = 24)
 	public void dirtUnderPoolBecomesMud(GameTestHelper h) {
 		box(h, 6, 6, 6);
 		fill(h, 1, 1, 1, 5, 1, 5, Blocks.DIRT);
@@ -130,7 +130,7 @@ public class CheckMoistureGameTests {
 	 * Basalt is directional (along its axis 4, across 0). Two compartments, each a pool over one basalt block over
 	 * a dry chamber: vertical basalt (axis Y) lets the water down; horizontal basalt (axis X) does not.
 	 */
-	@GameTest(maxTicks = 3000, padding = 24)
+	@GameTest(environment = "ocwo-gametest:moisture_fast", maxTicks = 3000, padding = 24)
 	public void basaltIsDirectional(GameTestHelper h) {
 		// two columns of 1x1: x=1 (vertical basalt), x=3 (horizontal basalt), separated by obsidian
 		fill(h, 0, 0, 0, 4, 6, 2, Blocks.OBSIDIAN);
@@ -184,7 +184,7 @@ public class CheckMoistureGameTests {
 	 * Mud made by the simulation, mined then placed back: liquid water + moisture + the water carried by the item
 	 * (min(moisture, fixed water) when mined) stays constant, and the placed mud does not turn back into dirt.
 	 */
-	@GameTest(maxTicks = 1000, padding = 24)
+	@GameTest(environment = "ocwo-gametest:moisture_fast", maxTicks = 1000, padding = 24)
 	public void mudMinedAndPlacedKeepsWater(GameTestHelper h) {
 		box(h, 4, 4, 4);
 		BlockPos p = new BlockPos(2, 1, 2);

@@ -31,7 +31,7 @@
 	"ocwo.debug.stage.sature": "saturé",
 	"ocwo.debug.sim.operators": "OCWO simulation : réservé aux opérateurs",
 	"ocwo.debug.sim.cost": "OCWO eau : %s ms/tick (écoulement %s, pression %s, humidité %s)",
-	"ocwo.debug.sim.queues": "Blocs d'humidité actifs : %s, masses d'eau avec du travail : %s",
+	"ocwo.debug.sim.queues": "Ticks aléatoires d'humidité au dernier tick : %s, masses d'eau avec du travail : %s",
 	"ocwo.debug.sim.mspt": "MSPT du serveur : %s ms",
 	"ocwo.debug.sim.quotas": "Distance de simulation de l'eau : %s chunks, masses d'eau : %s (%s colonnes)",
 	"ocwo.debug.sim.limits": "Dernier tick : %s masses traitées, %s niveaux déplacés par la pression, travail reporté : %s, accélération max ×%s",
@@ -44,5 +44,7 @@
 	"ocwo.water.info": "%s blocs d'eau réveillés dans un rayon de %s chunks (toute l'autre eau est au repos) ; réserve d'eau de cette zone : %s niveaux",
 	"gamerule.ocwo.water_rest": "Eau au repos",
 	"gamerule.ocwo.water_rest.description": "L'eau de la génération du monde n'est pas simulée (écoulement, pression, humidité) tant que rien ne la dérange : un bloc modifié à côté la réveille, et le réveil s'étend aussi loin que l'eau bouge",
-	"ocwo.debug.head.reserve": "OCWO réserve d'eau de la zone : %s niveaux"
+	"ocwo.debug.head.reserve": "OCWO réserve d'eau de la zone : %s niveaux",
+	"gamerule.ocwo.moisture_random_ticks": "Ticks aléatoires de l'humidité",
+	"gamerule.ocwo.moisture_random_ticks.description": "Blocs tirés au hasard à chaque tick dans chaque section de chunk dont l'humidité a été dérangée (comme randomTickSpeed pour les cultures). Plus haut : les blocs s'imbibent et sèchent plus vite. 0 = humidité figée"
 }

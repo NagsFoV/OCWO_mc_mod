@@ -1,6 +1,34 @@
 # 06. Pression de l'eau
 
-**Statut : modèle validé par Valentin le 12/11/2026. Version 3 de l'algorithme le 14/11/2026, quotas déterministes et accélération le 15/11/2026, simulation complète à chaque tick le 15/11/2026 (branche `simulation-complete`), à tester en jeu.** Code : `PressureSearch` (recherches et transfert), déclenchement dans `ClassicFlowTask.pressure`, file de pression et vérification lente dans `CustomFluidTicks`.
+**Statut : modèle validé par Valentin le 12/11/2026. Version 3 de l'algorithme le 14/11/2026, quotas déterministes et accélération le 15/11/2026, simulation complète à chaque tick le 15/11/2026, monde au repos et réservoirs de zone le 16/11/2026 (branche `eau-au-repos`), à tester en jeu.** Code : `PressureSearch` (recherches et transfert), déclenchement dans `ClassicFlowTask.pressure`, file de pression et vérification lente dans `CustomFluidTicks`.
+
+## Monde au repos et réservoirs de zone (16/11/2026, branche `eau-au-repos`)
+
+**Pourquoi** : dans un vrai monde, la simulation complète coûtait de 740 à 820 ms par tick. Rien n'y est jamais à l'équilibre pour l'eau finie et la pression (rivières en pente, aquifères, berges qui absorbent), et tout se réveillait en chaîne. Décision de Valentin : le monde est **au repos par défaut**, comme dans Minecraft, et la simulation ne réagit qu'aux perturbations.
+
+**Eau au repos** (`WaterRest`, `WakeLayer`) :
+- L'eau que personne n'a dérangée est au repos : l'écoulement ne lui programme aucune tâche, la pression la traite comme une paroi, l'humidité ne l'absorbe pas, les vérifications autour des joueurs l'ignorent.
+- Un bloc modifié qui compte pour l'eau (fluide changé, bloc plein ou passage modifié) réveille l'eau de ce bloc et de ses 6 voisins ; l'eau qui bouge modifie ses voisins, donc le réveil s'étend aussi loin que l'eau bouge.
+- La dernière étape de la génération (colonnes de bulles, formes des blocs au chargement d'un chunk) ne réveille rien.
+- **Rendormissement** : une eau réveillée qui n'a pas bougé pendant 100 ticks, sans écoulement prévu, sans masse de pression en déséquilibre à côté et sans bloc voisin en train de s'imbiber, se remet au repos (balayage déterministe toutes les 20 ticks).
+- L'eau qu'un joueur ou l'écoulement a modifiée reste de l'eau « réelle », même rendormie : elle compte pour la pression et peut se vider. Seule l'eau **naturelle** (jamais modifiée depuis la génération) au repos est inerte.
+- Sauvegardé par chunk ; un chunk sans information a toute son eau au repos. Un chunk d'un monde existant où les joueurs sont déjà allés garde son eau en mouvement réveillée la première fois que cette version le voit.
+- Règle `ocwo:water_rest` (activée), commandes `/ocwo water info <rayon>` et `/ocwo water rest <rayon>`.
+
+**Réservoirs de zone** (`WaterReserves`, option choisie par Valentin) : quand l'écoulement prend de l'eau à de l'eau naturelle (au repos ou non) ou lui en verse, l'eau naturelle garde son niveau et la réserve de sa zone (4×4 chunks, sauvegardée) paie ou reçoit la différence. La réserve démarre au volume d'eau de la zone ; vide, l'eau naturelle baisse vraiment. Conservation exacte : eau visible plus réserves. Une tranchée creusée depuis une rivière se remplit sans vider la rivière. Affichée dans F3 et dans `/ocwo water info`.
+
+**Mesures** (monde régénéré à la graine de « New World test », 21×21 chunks autour du joueur, temps moyen par tick du serveur entier / 1 % des pires ticks) :
+
+| Situation | Simulation complète sans repos | Monde au repos |
+|---|---|---|
+| Monde neuf, tout activé | 740 à 820 ms / 1,4 à 2,4 s | 3,9 à 4,0 ms / 5 à 6 ms |
+| Même chose, humidité coupée | 406 ms | 3,3 ms |
+| Bassin de 24×12 posé sur du sable et de la terre | - | 4,1 à 4,2 ms / 6 ms |
+| Tranchée et fosse au bord d'une rivière | - (1re version du repos : 222 puis 494 ms, 111 000 blocs réveillés) | 4,4 ms / 6 à 7,5 ms ; 6 puis 40 blocs réveillés, la réserve de la zone paie (129 336 → 129 307 niveaux) |
+
+Monde existant (copie de « New World test » après les sessions de Valentin) : 167 à 210 ms, parce qu'environ 30 000 à 38 000 blocs y étaient déjà en mouvement et restent réveillés. Choix proposé à Valentin : tout mettre au repos au premier chargement, ou `/ocwo water rest <rayon>` zone par zone. Les tests en jeu se font de préférence dans un nouveau monde.
+
+**Tests** : eau générée immobile, perturbation locale, conservation sans repos, rendormissement, réservoir avec conservation exacte (eau visible + réserve).
 
 ## Simulation complète à chaque tick (15/11/2026, branche `simulation-complete`)
 

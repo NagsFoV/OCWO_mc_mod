@@ -26,6 +26,10 @@ public class OcwoFluidGameRules {
 	public static final GameRule<Boolean> MOISTURE_SIMULATION = enabled()
 			? Services.PLATFORM.registerBooleanRule("moisture_simulation", true) : null;
 
+	/** Moisture random ticks: blocks drawn per section with moisture, every tick (like randomTickSpeed). */
+	public static final GameRule<Integer> MOISTURE_RANDOM_TICKS = enabled()
+			? Services.PLATFORM.registerIntRule("moisture_random_ticks", 3, 0, 4096) : null;
+
 	/** TEST ONLY, NOT CONSERVATIVE: vanilla rain adds moisture to the top blocks (no clouds yet). */
 	public static final GameRule<Boolean> RAIN_MOISTURE_TEST = enabled()
 			? Services.PLATFORM.registerBooleanRule("rain_moisture_test", false) : null;

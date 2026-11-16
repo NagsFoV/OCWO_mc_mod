@@ -163,7 +163,16 @@ Trois cas, vérifiés dans le code actuel :
 
 **Stockage** (`MoistureLayer`) : l'humidité de chaque bloc, par section de chunk (tableau créé seulement si la section en contient), en **unités entières : 1 niveau d'eau = 16 unités**, pour une conservation exacte. Sauvegardée avec le chunk, pas encore envoyée aux clients (ce sera l'étape 2, pour l'assombrissement).
 
-**Simulation** (`MoistureSimulation`) : toutes les 10 ticks, sur **tous** les blocs « actifs » dans la distance de simulation de l'eau (`ocwo:water_simulation_distance`, voir 06, « Simulation complète à chaque tick ») : rien n'est reporté, le tick attend que ce travail soit fait. Au-delà de la distance, les blocs actifs attendent, figés, sans rien perdre. L'aléatoire (absorption, transmission, échantillonnage) vient d'une source tirée de la graine du monde. Un pas d'un bloc :
+**Simulation par ticks aléatoires** (`MoistureSimulation`, 16/11/2026, validé par Valentin) : comme la pousse des cultures, à chaque tick, `ocwo:moisture_random_ticks` blocs (3 par défaut) sont tirés au hasard dans chaque section de chunk qui a une couche d'humidité, dans les chunks qui tournent et dans la distance de simulation de l'eau. Le tirage utilise l'aléatoire du monde : seuls l'écoulement et la pression restent déterministes. Chaque action d'un bloc est tirée selon la perméabilité de son matériau : en moyenne, le sable laisse toujours passer l'eau plus vite que la terre, la pierre presque pas, les matériaux étanches jamais. L'absorption depuis l'eau est lente et bornée : au plus un niveau par passage, avec la probabilité de la perméabilité. Le coût est fixe et petit, quelle que soit la quantité d'eau. L'eau naturelle au repos n'est pas absorbée (voir 06, « Monde au repos »).
+
+**Humidité de génération** (16/11/2026) : une section sans couche d'humidité est à son équilibre, calculé à partir de la profondeur et du biome, sans rien enregistrer :
+- saturé sous le niveau de la mer ;
+- au-dessus : sec dans les biomes sans précipitations (désert, savane…), mouillé dans les marais, humide ailleurs ;
+- jamais au stade qui changerait le bloc (la terre reste de la terre), jamais sous le stade qui le ferait revenir (la boue reste de la boue), et au moins son eau fixe.
+
+Une section reçoit sa couche, remplie avec cet équilibre (sans créer ni perdre d'eau), dès qu'un de ses blocs est dérangé (bloc posé ou cassé, eau qui bouge à côté). Un bloc à son équilibre, entouré de blocs à leur équilibre et sans eau en mouvement à côté, ne fait rien et ne réveille rien. Un bloc posé par un joueur arrive sec (plus son eau fixe). Les chunks déjà générés en profitent aussi pour les sections qu'ils n'avaient jamais enregistrées.
+
+Un pas d'un bloc :
 1. **absorption** : prend 1 niveau d'eau à un bloc d'eau voisin, avec une probabilité liée à la perméabilité de la face ;
 2. **transmission** aux voisins poreux, selon l'écart de remplissage et la plus faible des deux perméabilités (par face, ou par axe pour les blocs orientés), avec un biais vers le bas ;
 3. **suintement** (règle unique) : un bloc saturé qui reçoit encore (de l'eau ou un voisin saturé au-dessus ou sur le côté) donne 1 niveau d'eau à une case libre en dessous ou à côté, jamais au-dessus, sauf s'il « retient l'eau » ou change d'état à ce stade ;
@@ -175,13 +184,13 @@ Les blocs deviennent actifs quand l'eau bouge à côté d'eux, quand un bloc por
 
 **Pluie** : pas d'absorption (pas encore de nuages : la pluie vanilla créerait de l'eau). La règle de jeu `ocwo:rain_moisture_test` (désactivée par défaut, **non conservative**) permet d'essayer l'effet de la pluie sur les blocs de surface.
 
-**Règles de jeu** : `ocwo:moisture_simulation` (activée par défaut), `ocwo:rain_moisture_test` (désactivée), et la distance de simulation de l'eau (voir 06).
+**Règles de jeu** : `ocwo:moisture_simulation` (activée par défaut), `ocwo:rain_moisture_test` (désactivée), `ocwo:moisture_random_ticks` (3), et la distance de simulation de l'eau (voir 06).
 
 **Commande de débogage** : `/ocwo moisture [position]` affiche le matériau, l'humidité (unités et niveaux), le stade, la perméabilité de chaque face et les changements d'état prévus ; `/ocwo moisture set <position> <unités>` (opérateurs) fixe l'humidité pour un essai.
 
 **Performance** (test `wetArea`, lancé avec les tests de performance) : un bassin de 48×48, 2 blocs de profondeur, sur un sol de terre et de cobblestone. Sur 2 000 ticks : notre code d'eau prend 3,1 ms par tick en moyenne, dont 0,18 ms pour l'humidité, et 39 ms au pire tick (cibles : 10 et 50 ms). À la fin, 1 150 blocs de terre sont devenus de la boue.
 
-Avec les quotas fixes (15/11/2026), mesuré le même jour sur le même PC (chargé) pour comparer : avant, 6,0 ms en moyenne, 42 à 45 ms au pire tick ; après, 6,9 ms (dont 0,1 ms pour l'humidité), 39 à 57 ms au pire tick, 1 120 blocs de boue. Avec 2 000 blocs par passage, le pire tick montait à 70 ms : d'où la valeur de 500. Depuis la simulation complète (tous les blocs actifs à chaque pas) : 2,3 ms en moyenne, 1 152 blocs de boue ; le pire tick (157 ms) est au moment où le bassin est posé d'un coup.
+Avec les quotas fixes (15/11/2026), mesuré le même jour sur le même PC (chargé) pour comparer : avant, 6,0 ms en moyenne, 42 à 45 ms au pire tick ; après, 6,9 ms (dont 0,1 ms pour l'humidité), 39 à 57 ms au pire tick, 1 120 blocs de boue. Avec 2 000 blocs par passage, le pire tick montait à 70 ms : d'où la valeur de 500. Depuis la simulation complète (tous les blocs actifs à chaque pas) : 2,3 ms en moyenne, 1 152 blocs de boue ; le pire tick (157 ms) est au moment où le bassin est posé d'un coup. Avec les ticks aléatoires (16/11/2026), un bassin de 24×12 posé sur du sable et de la terre coûte 4,1 ms par tick pour tout le serveur ; après 2 minutes, le sable est humide (22/48 unités) et la terre encore sèche (15/96). Test `sandSoaksFasterThanDirt` : sable 77 % plein, terre 20 %, eau exacte.
 
 **Tests automatiques** (`CheckMoistureGameTests`, dans les tests courants) : mur de cobblestone qui suinte, laine qui retient, obsidienne étanche, terre sous un bassin qui devient boue, basalte directionnel. Chaque test vérifie à chaque tick que l'eau liquide plus l'humidité ne change pas. Les tests de pression sont désormais construits en obsidienne : avec de la pierre, une partie de l'eau passait dans les murs (comportement normal, mais qui faussait ces tests de pression).
 

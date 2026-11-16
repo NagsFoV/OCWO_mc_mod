@@ -4,7 +4,6 @@ import io.github.nagsfov.ocwo.fluids.FluidUtils;
 import io.github.nagsfov.ocwo.fluids.OcwoFluidGameRules;
 import io.github.nagsfov.ocwo.platform.Services;
 import io.github.nagsfov.ocwo.util.OcwoProfiler;
-import it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -20,8 +19,16 @@ import net.minecraft.world.level.material.Fluids;
 /**
  * OCWO block moisture simulation for one level (see 03-humidite-et-etats-des-blocs.md).
  * <p>
- * Slow: runs every {@link #PERIOD} ticks, on every "active" block within the water simulation distance (complete:
- * the tick waits for it; blocks beyond the distance are frozen). One step of a block:
+ * <b>Random ticks</b> (like the growth of crops): every tick, {@code ocwo:moisture_random_ticks} blocks drawn at random
+ * in every section that has a moisture array, in the chunks that tick within the water simulation distance. A more
+ * permeable material moves water more often (each action is drawn with its permeability), so sand always lets water
+ * through faster than dirt on average, stone hardly, sealed materials never.
+ * <p>
+ * <b>Generation moisture</b>: a section without an array is at its equilibrium, derived from depth and biome
+ * ({@link #equilibrium}), with nothing stored: saturated under sea level, then dry in dry biomes, damp elsewhere, wet in
+ * swamps, never at the stage that would change the block (dirt stays dirt). A section gets its array (filled with
+ * that equilibrium) when one of its blocks is disturbed; a block at its equilibrium among blocks at their
+ * equilibrium does nothing. One step of a block:
  * <ol>
  *   <li>absorption: takes one water level from a neighbouring water block (if not full);</li>
  *   <li>transmission: shares moisture with porous neighbours, by fill ratio and permeability, biased downwards;</li>
@@ -41,7 +48,8 @@ public final class MoistureSimulation {
 	private static final Direction[] SEEP_DIRS = {Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST};
 
 	private final ServerLevel level;
-	private final LongLinkedOpenHashSet active = new LongLinkedOpenHashSet();
+	/** Blocks stepped by the random ticks of the last tick (diagnostics). */
+	private int lastSteps, steps;
 	/** true while the simulation itself changes a block (state change), so that the block-change hook ignores it */
 	private boolean internalChange;
 
@@ -53,12 +61,19 @@ public final class MoistureSimulation {
 		return OcwoFluidGameRules.MOISTURE_SIMULATION != null && level.getGameRules().get(OcwoFluidGameRules.MOISTURE_SIMULATION);
 	}
 
+	/** Still soaking: a block with its own moisture (array) that is not full. Keeps the water next to it awake. */
 	public boolean isActive(BlockPos pos) {
-		return active.contains(pos.asLong());
+		if (!level.isLoaded(pos)) return false;
+		LevelChunk chunk = level.getChunkAt(pos);
+		MoistureLayer layer = Services.PLATFORM.getMoistureLayer(chunk);
+		if (layer == null || !layer.has(chunk, pos)) return false;
+		MoistureProps p = MoistureData.get(level.getBlockState(pos));
+		return p != null && p.holdsMoisture() && layer.get(chunk, pos) < p.capacity();
 	}
 
+	/** Blocks stepped by the random ticks during the last tick. */
 	public int activeCount() {
-		return active.size();
+		return lastSteps;
 	}
 
 	// ------------------------------------------------------------------ storage
@@ -66,31 +81,87 @@ public final class MoistureSimulation {
 	public int units(BlockPos pos) {
 		LevelChunk chunk = level.getChunkAt(pos);
 		MoistureLayer layer = Services.PLATFORM.getMoistureLayer(chunk);
-		return layer == null ? 0 : layer.get(chunk, pos);
+		if (layer != null && layer.has(chunk, pos)) return layer.get(chunk, pos);
+		return equilibrium(pos, level.getBlockState(pos));
 	}
 
 	public void setUnits(BlockPos pos, int units) {
 		LevelChunk chunk = level.getChunkAt(pos);
-		MoistureLayer layer = units == 0 ? Services.PLATFORM.getMoistureLayer(chunk) : Services.PLATFORM.getOrCreateMoistureLayer(chunk);
-		if (layer == null) return;
-		layer.set(chunk, pos, units);
+		ensureSection(chunk, pos);
+		Services.PLATFORM.getOrCreateMoistureLayer(chunk).set(chunk, pos, units);
 		chunk.markUnsaved();
+	}
+
+	/** The section of pos gets its array, filled with the equilibrium of its blocks (no water created or lost). */
+	private void ensureSection(LevelChunk chunk, BlockPos pos) {
+		MoistureLayer layer = Services.PLATFORM.getOrCreateMoistureLayer(chunk);
+		if (layer.has(chunk, pos)) return;
+		int bx = pos.getX() & ~15, by = pos.getY() & ~15, bz = pos.getZ() & ~15;
+		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+		layer.ensure(chunk, pos, k -> {
+			m.set(bx | (k & 15), by | (k >> 8), bz | ((k >> 4) & 15));
+			return equilibrium(m, chunk.getBlockState(m));
+		});
+		chunk.markUnsaved();
+	}
+
+	private static int stageUnits(Moisture.Stage stage, int cap) {
+		return switch (stage) {
+			case SEC -> 0;
+			case HUMIDE -> (cap * 3) / 8;
+			case MOUILLE -> (cap * 3) / 4;
+			case SATURE -> cap;
+		};
+	}
+
+	/**
+	 * Generation moisture of a block (nothing stored): saturated under sea level; above, dry in the biomes without
+	 * precipitation, wet in swamps, damp elsewhere; never at the stage that would change the block, never under the
+	 * stage that would turn it back; at least its fixed water. A pure function of the block, its height and its biome.
+	 */
+	public int equilibrium(BlockPos pos, BlockState state) {
+		MoistureProps props = MoistureData.get(state);
+		if (props == null || !props.holdsMoisture()) return 0;
+		int cap = props.capacity();
+		Moisture.Stage stage;
+		if (pos.getY() < level.getSeaLevel()) {
+			stage = Moisture.Stage.SATURE;
+		} else {
+			var biome = level.getBiome(pos);
+			String path = biome.unwrapKey().map(k -> k.identifier().getPath()).orElse("");
+			if (path.contains("swamp")) stage = Moisture.Stage.MOUILLE;
+			else if (!biome.value().hasPrecipitation()) stage = Moisture.Stage.SEC;
+			else stage = Moisture.Stage.HUMIDE;
+		}
+		if (props.transformTo() != null && stage.ordinal() >= props.transformStage().ordinal()) {
+			stage = Moisture.Stage.values()[Math.max(0, props.transformStage().ordinal() - 1)];
+		}
+		int units = stageUnits(stage, cap);
+		if (props.transformTo() != null) {
+			// strictly under the stage that would change the block
+			while (units > 0 && Moisture.Stage.of(units, cap).ordinal() >= props.transformStage().ordinal()) units--;
+		}
+		if (props.revertTo() != null) {
+			while (units < cap && Moisture.Stage.of(units, cap).ordinal() < props.revertStage().ordinal()) units++;
+		}
+		return Math.max(units, Math.min(cap, props.fixedWater()));
 	}
 
 	// ------------------------------------------------------------------ activation
 
+	/** The section of pos gets its array: its blocks join the random ticks. */
 	public void activate(BlockPos pos) {
-		active.add(pos.asLong());
+		if (level.isLoaded(pos)) ensureSection(level.getChunkAt(pos), pos);
 	}
 
-	/** Activates the moisture-holding blocks among this position and its neighbours. */
+	/** Water moved here: the moisture-holding blocks around it join the random ticks. */
 	public void activateAround(BlockPos pos) {
 		if (!enabled()) return;
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
-		if (holds(pos)) active.add(pos.asLong());
+		if (holds(pos)) activate(pos);
 		for (Direction d : Direction.values()) {
 			m.setWithOffset(pos, d);
-			if (level.isLoaded(m) && holds(m)) active.add(m.asLong());
+			if (level.isLoaded(m) && holds(m)) activate(m.immutable());
 		}
 	}
 
@@ -114,15 +185,13 @@ public final class MoistureSimulation {
 		MoistureProps oldProps = MoistureData.get(oldState);
 		MoistureProps newProps = MoistureData.get(newState);
 		if (oldProps == null && newProps == null) return;
-		if (oldProps != null && oldProps.holdsMoisture() && oldProps.fixedWater() > 0) {
-			int h = units(pos);
-			int carried = Math.min(h, oldProps.fixedWater());
-			if (carried > 0) setUnits(pos, h - carried);
-		}
-		if (newProps != null && newProps.holdsMoisture() && newProps.fixedWater() > 0) {
-			setUnits(pos, units(pos) + newProps.fixedWater());
-		}
-		active.add(pos.asLong());
+		// what the old block held (stored, or its generation moisture) stays in the cell
+		LevelChunk chunk = level.getChunkAt(pos);
+		MoistureLayer layer = Services.PLATFORM.getMoistureLayer(chunk);
+		int h = layer != null && layer.has(chunk, pos) ? layer.get(chunk, pos) : equilibrium(pos, oldState);
+		if (oldProps != null && oldProps.holdsMoisture() && oldProps.fixedWater() > 0) h -= Math.min(h, oldProps.fixedWater());
+		if (newProps != null && newProps.holdsMoisture() && newProps.fixedWater() > 0) h += newProps.fixedWater();
+		setUnits(pos, h);
 		activateAround(pos);
 	}
 
@@ -139,33 +208,40 @@ public final class MoistureSimulation {
 	// ------------------------------------------------------------------ tick
 
 	public void tick() {
-		if (!enabled()) {
-			active.clear();
-			return;
-		}
-		long time = level.getGameTime();
-		if (time % SAMPLE_PERIOD == 0) sample();
-		if (time % PERIOD != 0 || active.isEmpty()) return;
+		lastSteps = steps;
+		steps = 0;
+		if (!enabled()) return;
+		if (level.getGameTime() % SAMPLE_PERIOD == 0) sample();
+	}
+
+	/**
+	 * Random ticks of one chunk (called for every chunk that ticks, like vanilla random ticks): a fixed number of
+	 * blocks drawn at random in each section that has a moisture array. Uses the level's random, like crops.
+	 */
+	public void randomTickChunk(LevelChunk chunk) {
+		if (!enabled()) return;
+		MoistureLayer layer = Services.PLATFORM.getMoistureLayer(chunk);
+		if (layer == null || layer.sectionCount() == 0) return;
+		if (!io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).bodies().inRangeChunk(chunk.getPos().pack())) return;
+		int n = OcwoFluidGameRules.MOISTURE_RANDOM_TICKS == null ? 3 : level.getGameRules().get(OcwoFluidGameRules.MOISTURE_RANDOM_TICKS);
+		if (n <= 0) return;
 		long start = System.nanoTime();
-		io.github.nagsfov.ocwo.fluids.WaterBodies range = io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get(level).bodies();
-		// every active block, each step (the blocks it activates are for the next step)
-		int count = active.size();
-		BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-		for (int i = 0; i < count && !active.isEmpty(); i++) {
-			long p = active.removeFirstLong();
-			pos.set(BlockPos.getX(p), BlockPos.getY(p), BlockPos.getZ(p));
-			if (!level.isLoaded(pos) || !range.inRange(pos)) {
-				active.add(p); // frozen beyond the water simulation distance: it waits, nothing is lost
-				continue;
+		RandomSource random = level.getRandom();
+		int x0 = chunk.getPos().getMinBlockX(), z0 = chunk.getPos().getMinBlockZ();
+		for (int index : layer.sectionIndexes()) {
+			int y0 = chunk.getSectionYFromSectionIndex(index) << 4;
+			for (int i = 0; i < n; i++) {
+				BlockPos pos = new BlockPos(x0 + random.nextInt(16), y0 + random.nextInt(16), z0 + random.nextInt(16));
+				steps++;
+				step(pos);
 			}
-			if (step(pos.immutable())) active.add(p);
 		}
 		OcwoProfiler.addMoistureNanos(level, System.nanoTime() - start);
 	}
 
-	/** Finds blocks that should be simulated near players (still water against porous blocks, rain test). */
+	/** Near players: porous blocks next to water that moves (not at rest) join the random ticks. */
 	private void sample() {
-		RandomSource random = io.github.nagsfov.ocwo.util.FastMath.RANDOM;
+		RandomSource random = level.getRandom();
 		boolean rain = OcwoFluidGameRules.RAIN_MOISTURE_TEST != null && level.getGameRules().get(OcwoFluidGameRules.RAIN_MOISTURE_TEST)
 				&& level.isRaining();
 		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
@@ -178,14 +254,10 @@ public final class MoistureSimulation {
 				if (!level.isLoaded(p)) continue;
 				MoistureProps props = MoistureData.get(level.getBlockState(p));
 				if (props == null || !props.holdsMoisture()) continue;
-				if (units(p) > 0) {
-					active.add(p.asLong());
-					continue;
-				}
 				for (Direction d : Direction.values()) {
 					m.setWithOffset(p, d);
 					if (level.isLoaded(m) && isWater(level.getFluidState(m)) && !io.github.nagsfov.ocwo.fluids.WaterRest.isInert(level, m)) {
-						active.add(p.asLong());
+						activate(p);
 						break;
 					}
 				}
@@ -206,7 +278,6 @@ public final class MoistureSimulation {
 			int h = units(top);
 			if (h < props.capacity()) {
 				setUnits(top, Math.min(props.capacity(), h + U));
-				active.add(top.asLong());
 			}
 		}
 	}
@@ -226,8 +297,9 @@ public final class MoistureSimulation {
 			// The block can no longer hold moisture (mined, replaced): release it as water here or next to it.
 			return h > 0 && release(pos, h);
 		}
-		RandomSource random = io.github.nagsfov.ocwo.util.FastMath.RANDOM;
+		RandomSource random = level.getRandom();
 		int cap = props.capacity();
+		if (atRest(pos, state, h)) return false;
 		if (props.fixedWater() > 0 && h < props.fixedWater()) {
 			// A block made of water with less moisture than its fixed water can only come from world generation
 			// (mangrove mud): its generation water is initialised once (the only creation of water allowed).
@@ -281,7 +353,6 @@ public final class MoistureSimulation {
 			if (x <= 0) continue;
 			h -= (int) x;
 			setUnits(n, h2 + (int) x);
-			active.add(n.asLong());
 		}
 
 		// 3. seepage: saturated (or over capacity after a state change) and still supplied
@@ -321,6 +392,24 @@ public final class MoistureSimulation {
 			return true;
 		}
 		return h != start || waterAround || (h > 0 && hasPorousNeighbourToFill(pos, state, props, h));
+	}
+
+	/**
+	 * At rest: the block is at its equilibrium, so are its porous neighbours, and no water that moves touches it:
+	 * nothing to do (generation moisture does not drift).
+	 */
+	private boolean atRest(BlockPos pos, BlockState state, int h) {
+		if (h != equilibrium(pos, state)) return false;
+		for (Direction d : Direction.values()) {
+			BlockPos n = pos.relative(d);
+			if (!level.isLoaded(n)) continue;
+			FluidState fs = level.getFluidState(n);
+			if (isWater(fs) && !io.github.nagsfov.ocwo.fluids.WaterRest.isInert(level, n)) return false;
+			BlockState ns = level.getBlockState(n);
+			MoistureProps np = MoistureData.get(ns);
+			if (np != null && np.holdsMoisture() && units(n) != equilibrium(n, ns)) return false;
+		}
+		return true;
 	}
 
 	private boolean hasPorousNeighbourToFill(BlockPos pos, BlockState state, MoistureProps props, int h) {

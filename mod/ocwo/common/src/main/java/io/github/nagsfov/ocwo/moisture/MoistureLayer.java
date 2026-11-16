@@ -14,8 +14,10 @@ import net.minecraft.util.ExtraCodecs;
 import net.minecraft.world.level.chunk.ChunkAccess;
 
 /**
- * Moisture of the blocks of one chunk, in units (see {@link Moisture}). Sparse: a section (16x16x16) gets its
- * array only once one of its blocks holds moisture. Saved with the chunk; never synced to clients (yet).
+ * Moisture of the blocks of one chunk, in units (see {@link Moisture}). Sparse: a section (16x16x16) without an
+ * array is at its equilibrium (generation moisture, derived from depth and biome by MoistureSimulation, nothing
+ * stored); a section gets its array, filled with that equilibrium, as soon as one of its blocks is disturbed. Only
+ * sections with an array are simulated (random ticks). Saved with the chunk; never synced to clients (yet).
  */
 public final class MoistureLayer {
 
@@ -32,20 +34,39 @@ public final class MoistureLayer {
 		return ((pos.getY() & 15) << 8) | ((pos.getZ() & 15) << 4) | (pos.getX() & 15);
 	}
 
+	public boolean has(ChunkAccess chunk, BlockPos pos) {
+		return sections.containsKey(chunk.getSectionIndex(pos.getY()));
+	}
+
+	/** Stored value (the section must have an array, see {@link #has}). */
 	public int get(ChunkAccess chunk, BlockPos pos) {
 		short[] s = sections.get(chunk.getSectionIndex(pos.getY()));
 		return s == null ? 0 : s[cell(pos)];
 	}
 
-	public void set(ChunkAccess chunk, BlockPos pos, int units) {
+	/** Gives the section of pos its array; {@code init} gives each cell (index y << 8 | z << 4 | x) its value. */
+	public void ensure(ChunkAccess chunk, BlockPos pos, java.util.function.IntUnaryOperator init) {
 		int index = chunk.getSectionIndex(pos.getY());
-		short[] s = sections.get(index);
-		if (s == null) {
-			if (units == 0) return;
-			s = new short[4096];
-			sections.put(index, s);
-		}
+		if (sections.containsKey(index)) return;
+		short[] s = new short[4096];
+		for (int k = 0; k < 4096; k++) s[k] = (short) Math.max(0, Math.min(Short.MAX_VALUE, init.applyAsInt(k)));
+		sections.put(index, s);
+	}
+
+	/** Sets a stored value (the section must have an array, see {@link #ensure}). */
+	public void set(ChunkAccess chunk, BlockPos pos, int units) {
+		short[] s = sections.get(chunk.getSectionIndex(pos.getY()));
+		if (s == null) return;
 		s[cell(pos)] = (short) Math.max(0, Math.min(Short.MAX_VALUE, units));
+	}
+
+	/** Section indexes that have an array (random ticks). */
+	public int[] sectionIndexes() {
+		return sections.keySet().toIntArray();
+	}
+
+	public int sectionCount() {
+		return sections.size();
 	}
 
 	public boolean isEmpty() {
@@ -86,13 +107,11 @@ public final class MoistureLayer {
 		ListTag list = new ListTag();
 		for (Int2ObjectMap.Entry<short[]> e : sections.int2ObjectEntrySet()) {
 			short[] s = e.getValue();
-			boolean any = false;
 			int[] packed = new int[2048];
 			for (int k = 0; k < 2048; k++) {
 				packed[k] = (s[2 * k] & 0xFFFF) | ((s[2 * k + 1] & 0xFFFF) << 16);
-				any |= packed[k] != 0;
 			}
-			if (!any) continue;
+			// an all-zero section is kept: without its array it would be back at its (wetter) equilibrium
 			CompoundTag sec = new CompoundTag();
 			sec.putInt("i", e.getIntKey());
 			sec.put("d", new IntArrayTag(packed));
