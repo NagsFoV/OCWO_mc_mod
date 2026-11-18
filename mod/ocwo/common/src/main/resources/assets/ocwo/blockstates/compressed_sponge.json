@@ -1,0 +1,52 @@
+{
+ "variants": {
+  "facing=up,wet=false": {
+   "model": "ocwo:block/compressed_sponge"
+  },
+  "facing=up,wet=true": {
+   "model": "ocwo:block/compressed_sponge_wet"
+  },
+  "facing=down,wet=false": {
+   "model": "ocwo:block/compressed_sponge"
+  },
+  "facing=down,wet=true": {
+   "model": "ocwo:block/compressed_sponge_wet"
+  },
+  "facing=north,wet=false": {
+   "model": "ocwo:block/compressed_sponge",
+   "x": 90
+  },
+  "facing=north,wet=true": {
+   "model": "ocwo:block/compressed_sponge_wet",
+   "x": 90
+  },
+  "facing=south,wet=false": {
+   "model": "ocwo:block/compressed_sponge",
+   "x": 90
+  },
+  "facing=south,wet=true": {
+   "model": "ocwo:block/compressed_sponge_wet",
+   "x": 90
+  },
+  "facing=east,wet=false": {
+   "model": "ocwo:block/compressed_sponge",
+   "x": 90,
+   "y": 90
+  },
+  "facing=east,wet=true": {
+   "model": "ocwo:block/compressed_sponge_wet",
+   "x": 90,
+   "y": 90
+  },
+  "facing=west,wet=false": {
+   "model": "ocwo:block/compressed_sponge",
+   "x": 90,
+   "y": 90
+  },
+  "facing=west,wet=true": {
+   "model": "ocwo:block/compressed_sponge_wet",
+   "x": 90,
+   "y": 90
+  }
+ }
+}

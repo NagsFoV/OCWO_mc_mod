@@ -193,13 +193,29 @@ public final class MoistureSimulation {
 		if (newProps != null && newProps.holdsMoisture() && newProps.fixedWater() > 0) h += newProps.fixedWater();
 		setUnits(pos, h);
 		activateAround(pos);
+		// a sponge (or double sponge) that went away gives its water back at once (not when a piston moves it)
+		if ((newProps == null || !newProps.holdsMoisture()) && !newState.is(net.minecraft.world.level.block.Blocks.MOVING_PISTON)
+				&& (io.github.nagsfov.ocwo.sponge.OcwoSponges.isSponge(oldState) || io.github.nagsfov.ocwo.sponge.OcwoSponges.isCompressed(oldState))) {
+			io.github.nagsfov.ocwo.sponge.SpongeLogic.onSpongeGone(level, pos, h);
+		}
+	}
+
+	/** Sets a block without the moisture accounting of block changes (the caller keeps the water balance). */
+	public void setBlockQuietly(BlockPos pos, BlockState state, int flags) {
+		boolean was = internalChange;
+		internalChange = true;
+		try {
+			level.setBlock(pos, state, flags);
+		} finally {
+			internalChange = was;
+		}
 	}
 
 	/**
 	 * A block that loses water when water is taken from its cell would be destroyed (kelp, seagrass: always full,
 	 * no fluid layer) or broken (bubble columns): the moisture system never takes water from those cells.
 	 */
-	private static boolean canTakeWaterFrom(BlockState state) {
+	public static boolean canTakeWaterFrom(BlockState state) {
 		if (state.is(net.minecraft.world.level.block.Blocks.BUBBLE_COLUMN)) return false;
 		return !(state.getBlock() instanceof net.minecraft.world.level.block.LiquidBlockContainer)
 				|| state.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED);
@@ -291,6 +307,7 @@ public final class MoistureSimulation {
 	/** @return true to keep the block active */
 	private boolean step(BlockPos pos) {
 		BlockState state = level.getBlockState(pos);
+		if (state.is(net.minecraft.world.level.block.Blocks.MOVING_PISTON)) return false; // carried by a piston (see SpongeLogic)
 		MoistureProps props = MoistureData.get(state);
 		int h = units(pos);
 		if (props == null || !props.holdsMoisture()) {
@@ -375,7 +392,10 @@ public final class MoistureSimulation {
 			}
 		}
 
-		if (h != start) setUnits(pos, h);
+		if (h != start) {
+			setUnits(pos, h);
+			if (io.github.nagsfov.ocwo.sponge.OcwoSponges.isAnySponge(state)) io.github.nagsfov.ocwo.sponge.SpongeLogic.updateLook(level, pos);
+		}
 
 		// 4. state change (moisture is kept)
 		stage = Moisture.Stage.of(h, cap);

@@ -35,7 +35,17 @@ EXTRA_OVERRIDES = {
 # Fixed water (levels) of blocks made of water that hold moisture: at most the moisture under which the block
 # cannot exist (mud turns back into dirt under "humide" = 25 % of 8 levels = 2 levels; wet sponge into sponge
 # under "humide" too), so that mining then placing one never creates water. Others (ice, snow): 8, unused for now.
-FIXED_WATER_LEVELS = {'mud': 2, 'wet_sponge': 2}
+# The wet sponge is made of no water of its own (03, "Éponges"): what it holds is its moisture, given back when it
+# goes away.
+FIXED_WATER_LEVELS = {'mud': 2, 'wet_sponge': 0}
+
+# OCWO's own blocks (03, "Éponges"): not on the classification page.
+OCWO_MATERIALS = {
+    'eponge_etiree': {'capacity': 64, 'permeability': 5, 'stages': False, 'retains': True,
+                      'blocks': ['ocwo:stretched_sponge']},
+    'eponge_compressee': {'capacity': 128, 'permeability': 0, 'stages': False, 'retains': True,
+                          'blocks': ['ocwo:compressed_sponge']},
+}
 
 # Blocks a material's state change applies to (03: only dirt-like soils become mud; grass, podzol, farmland… don't).
 # Missing material = all its blocks, except the target itself.
@@ -104,6 +114,10 @@ def main():
             doc['transform']['from'] = TRANSFORM_FROM.get(
                 mid, [b for b in sorted(assignment[mid]) if b != t['target']])
         doc['blocks'] = sorted(assignment[mid])
+        json.dump(doc, open(os.path.join(mat_dir, mid + '.json'), 'w', encoding='utf-8', newline='\n'), indent=1)
+        n_mat += 1
+
+    for mid, doc in OCWO_MATERIALS.items():
         json.dump(doc, open(os.path.join(mat_dir, mid + '.json'), 'w', encoding='utf-8', newline='\n'), indent=1)
         n_mat += 1
 

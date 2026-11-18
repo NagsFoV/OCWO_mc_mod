@@ -1,0 +1,9 @@
+{
+ "capacity": 128,
+ "permeability": 0,
+ "stages": false,
+ "retains": true,
+ "blocks": [
+  "ocwo:compressed_sponge"
+ ]
+}

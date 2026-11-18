@@ -46,5 +46,7 @@
 	"gamerule.ocwo.water_rest.description": "L'eau de la génération du monde n'est pas simulée (écoulement, pression, humidité) tant que rien ne la dérange : un bloc modifié à côté la réveille, et le réveil s'étend aussi loin que l'eau bouge",
 	"ocwo.debug.head.reserve": "OCWO réserve d'eau de la zone : %s niveaux",
 	"gamerule.ocwo.moisture_random_ticks": "Ticks aléatoires de l'humidité",
-	"gamerule.ocwo.moisture_random_ticks.description": "Blocs tirés au hasard à chaque tick dans chaque section de chunk dont l'humidité a été dérangée (comme randomTickSpeed pour les cultures). Plus haut : les blocs s'imbibent et sèchent plus vite. 0 = humidité figée"
+	"gamerule.ocwo.moisture_random_ticks.description": "Blocs tirés au hasard à chaque tick dans chaque section de chunk dont l'humidité a été dérangée (comme randomTickSpeed pour les cultures). Plus haut : les blocs s'imbibent et sèchent plus vite. 0 = humidité figée",
+	"block.ocwo.stretched_sponge": "Éponge étirée",
+	"block.ocwo.compressed_sponge": "Double éponge"
 }

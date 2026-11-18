@@ -48,6 +48,8 @@ public final class Ocwo {
 		}
 		if (fluidItemsEnabled()) {
 			OcwoFluidItems.init();
+			// OCWO sponge blocks: stretched sponge, double sponge (03-humidite-et-etats-des-blocs.md)
+			io.github.nagsfov.ocwo.sponge.OcwoSponges.init();
 		}
 	}
 

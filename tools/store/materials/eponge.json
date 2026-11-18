@@ -1,0 +1,9 @@
+{
+ "data": {
+  "capacity": 64,
+  "permeability": 5,
+  "stages": false,
+  "retains": true,
+  "transform": null
+ }
+}

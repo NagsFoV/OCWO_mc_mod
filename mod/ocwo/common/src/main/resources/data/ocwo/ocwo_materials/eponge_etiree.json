@@ -1,0 +1,9 @@
+{
+ "capacity": 64,
+ "permeability": 5,
+ "stages": false,
+ "retains": true,
+ "blocks": [
+  "ocwo:stretched_sponge"
+ ]
+}

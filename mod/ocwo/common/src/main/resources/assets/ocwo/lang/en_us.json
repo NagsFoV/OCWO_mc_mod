@@ -59,5 +59,7 @@
 	"gamerule.ocwo.water_rest.description": "The water of the world generation is not simulated (flow, pressure, moisture) until something disturbs it: a block changed next to it wakes it up, and the awakening spreads as far as the water moves",
 	"ocwo.debug.head.reserve": "OCWO water reserve of the zone: %s levels",
 	"gamerule.ocwo.moisture_random_ticks": "Moisture random ticks",
-	"gamerule.ocwo.moisture_random_ticks.description": "Blocks drawn at random every tick in each chunk section that holds disturbed moisture (like randomTickSpeed for crops). Higher: blocks soak up and dry faster. 0 = moisture frozen"
+	"gamerule.ocwo.moisture_random_ticks.description": "Blocks drawn at random every tick in each chunk section that holds disturbed moisture (like randomTickSpeed for crops). Higher: blocks soak up and dry faster. 0 = moisture frozen",
+	"block.ocwo.stretched_sponge": "Stretched Sponge",
+	"block.ocwo.compressed_sponge": "Double Sponge"
 }

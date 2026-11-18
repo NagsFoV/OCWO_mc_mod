@@ -26,7 +26,7 @@ C'est le seul vrai système d'humidité du vanilla.
 | Terre, terre stérile, terre racinée | → **boue** | Le joueur utilise une fiole d'eau dessus (action manuelle, pas de simulation) |
 | Boue | → **argile** | Boue posée sur un bloc au-dessus d'une stalactite de dripstone : elle sèche par tick aléatoire |
 | Poudre de béton | → béton | Contact immédiat avec de l'eau |
-| Éponge | → éponge mouillée | Absorbe l'eau autour d'elle. L'éponge mouillée sèche dans le Nether |
+| Éponge | → éponge mouillée | Absorbe l'eau autour d'elle. L'éponge mouillée sèche dans le Nether (OCWO : voir « Éponges ») |
 | Corail | → corail mort | Aucune eau adjacente (vérifiée par tick programmé) |
 | Neige, glace | Fondent | Luminosité de bloc supérieure à 11 (tick aléatoire) |
 | Canne à sucre | Ne pousse pas | Pas d'eau adjacente au bloc de base |
@@ -180,7 +180,7 @@ Un pas d'un bloc :
 
 Les blocs deviennent actifs quand l'eau bouge à côté d'eux, quand un bloc poreux est posé ou cassé, et par un échantillonnage autour des joueurs (eau immobile contre un bloc poreux). Quand un bloc perd sa capacité (cassé, remplacé), son humidité est rendue en eau sur place ou à côté. Ce qui ne trouve pas de place reste stocké et sera rendu plus tard : rien n'est jamais perdu.
 
-**Eau fixe** (blocs faits d'eau qui retiennent de l'humidité : boue, éponge mouillée), comptabilité symétrique : quand on casse le bloc, l'objet emporte min(humidité, eau fixe) et le reste est libéré en eau ; quand on pose le bloc, son eau fixe est ajoutée à la case. L'eau fixe vaut 2 niveaux, le seuil sous lequel la boue redevient de la terre (et l'éponge mouillée de l'éponge) : miner puis reposer ne crée donc jamais d'eau, et la boue posée ne redevient pas aussitôt de la terre. Une boue générée par le monde (mangroves) sans humidité reçoit une fois son eau fixe au premier passage de la simulation (eau de génération, seule création permise). La glace et la neige ne retiennent pas d'humidité : leur eau fixe n'est pas encore utilisée. Les algues, herbiers et colonnes de bulles ne cèdent jamais d'eau à l'absorption (sinon ils seraient détruits).
+**Eau fixe** (blocs faits d'eau qui retiennent de l'humidité : boue ; l'éponge mouillée n'en a plus depuis le 18/11/2026, voir « Éponges »), comptabilité symétrique : quand on casse le bloc, l'objet emporte min(humidité, eau fixe) et le reste est libéré en eau ; quand on pose le bloc, son eau fixe est ajoutée à la case. L'eau fixe vaut 2 niveaux, le seuil sous lequel la boue redevient de la terre (et l'éponge mouillée de l'éponge) : miner puis reposer ne crée donc jamais d'eau, et la boue posée ne redevient pas aussitôt de la terre. Une boue générée par le monde (mangroves) sans humidité reçoit une fois son eau fixe au premier passage de la simulation (eau de génération, seule création permise). La glace et la neige ne retiennent pas d'humidité : leur eau fixe n'est pas encore utilisée. Les algues, herbiers et colonnes de bulles ne cèdent jamais d'eau à l'absorption (sinon ils seraient détruits).
 
 **Pluie** : pas d'absorption (pas encore de nuages : la pluie vanilla créerait de l'eau). La règle de jeu `ocwo:rain_moisture_test` (désactivée par défaut, **non conservative**) permet d'essayer l'effet de la pluie sur les blocs de surface.
 
@@ -193,6 +193,66 @@ Les blocs deviennent actifs quand l'eau bouge à côté d'eux, quand un bloc por
 Avec les quotas fixes (15/11/2026), mesuré le même jour sur le même PC (chargé) pour comparer : avant, 6,0 ms en moyenne, 42 à 45 ms au pire tick ; après, 6,9 ms (dont 0,1 ms pour l'humidité), 39 à 57 ms au pire tick, 1 120 blocs de boue. Avec 2 000 blocs par passage, le pire tick montait à 70 ms : d'où la valeur de 500. Depuis la simulation complète (tous les blocs actifs à chaque pas) : 2,3 ms en moyenne, 1 152 blocs de boue ; le pire tick (157 ms) est au moment où le bassin est posé d'un coup. Avec les ticks aléatoires (16/11/2026), un bassin de 24×12 posé sur du sable et de la terre coûte 4,1 ms par tick pour tout le serveur ; après 2 minutes, le sable est humide (22/48 unités) et la terre encore sèche (15/96). Test `sandSoaksFasterThanDirt` : sable 77 % plein, terre 20 %, eau exacte.
 
 **Tests automatiques** (`CheckMoistureGameTests`, dans les tests courants) : mur de cobblestone qui suinte, laine qui retient, obsidienne étanche, terre sous un bassin qui devient boue, basalte directionnel. Chaque test vérifie à chaque tick que l'eau liquide plus l'humidité ne change pas. Les tests de pression sont désormais construits en obsidienne : avec de la pierre, une partie de l'eau passait dans les murs (comportement normal, mais qui faussait ces tests de pression).
+
+## Éponges (18/11/2026, branche `eponges`, à tester en jeu)
+
+Règles de Valentin. L'eau est conservée exactement dans chaque cas : eau liquide plus humidité des blocs.
+
+**L'éponge stocke l'eau** : rien n'est détruit comme en vanilla. L'eau absorbée devient l'humidité de l'éponge (matériau `eponge`, contenance 64 niveaux, soit 8 blocs d'eau pleins). L'éponge aspire tout de suite :
+- quand on la pose ;
+- quand un bloc voisin change.
+
+Elle prend l'eau reliée jusqu'à 6 blocs de distance, sur 64 cases au plus, jusqu'à être pleine. Elle paraît mouillée dès qu'elle tient 1 niveau.
+
+Elle garde son eau quand un piston la pousse ou la tire. Plus généralement, tout bloc déplacé par un piston emporte son humidité.
+
+Une éponge cassée, brûlée ou détruite par une explosion rend son eau autour d'elle. Elle n'a plus d'eau fixe : l'objet éponge mouillée ne transporte rien.
+
+Dans le Nether, une éponge mouillée sèche et son eau s'évapore, comme en vanilla.
+
+**Écrasement** : une éponge mouillée poussée par un piston contre un bloc qui ne bouge pas est écrasée. C'est le cas quand le piston ne pourrait pas pousser : bloc fixe, ou plus de 12 blocs à pousser. Une éponge sèche bloque le piston, comme en vanilla.
+- L'éponge rend toute son eau dans les cases libres autour d'elle, les plus proches d'abord, vers le bas en premier. L'eau ne va jamais dans le bloc contre lequel elle est pressée.
+- Sans place autour, l'eau passe par la tête du piston, qui peut contenir de l'eau (elle peut ensuite passer dans le corps du piston).
+- Ce qui ne trouve aucune place reste dans la case de la tête, en humidité. Il en sort plus tard, comme pour tout bloc qui ne retient plus d'eau.
+- L'éponge se casse et tombe au sol en objet éponge sèche.
+
+**Double éponge** (`ocwo:compressed_sponge`) : deux éponges pressées ensemble contre un bloc qui ne bouge pas, mouillées ou non.
+- Chacune rend la moitié de son eau, en niveaux entiers ; le reste est gardé.
+- Elles deviennent un seul bloc à la place de la deuxième, et la tête du piston prend la place de la première.
+- C'est une éponge essorée : elle n'aspire rien tant qu'elle est compressée. Sa contenance de 128 niveaux sert seulement à garder ce qui reste.
+- Quand la tête du piston s'en va, elle se sépare en deux éponges, qui se partagent son eau et réaspirent normalement. L'eau déjà présente dans la case libérée va dans l'éponge posée là.
+- Cassée, elle donne deux éponges et rend son eau.
+
+**Éponge étirée** (`ocwo:stretched_sponge`) : un piston collant sorti a une éponge devant sa tête. De l'autre côté, l'éponge est tenue par un élément collant :
+- un bloc de slime ou de miel ;
+- la tête d'un autre piston collant tournée vers elle ;
+- la face d'un piston collant rentré tourné vers elle.
+
+Quand le piston se rétracte, l'éponge ne bouge pas : elle s'étire sur deux blocs, sa case et celle de la tête. Chaque moitié contient autant qu'une éponge, donc l'éponge étirée tient deux fois plus, et elle aspire tout de suite.
+
+Elle redevient une éponge :
+- quand le piston la repousse en un seul bloc (dans la case la plus éloignée du piston) ;
+- quand une moitié est détruite : l'autre moitié redevient l'éponge, et la moitié détruite ne donne pas d'objet.
+
+Elle rejette alors le surplus autour d'elle, au-delà de 64 niveaux. Ce qui ne trouve pas de place suinte plus tard.
+
+**Blocs non poussables** : les deux nouveaux blocs ne peuvent pas être poussés. Ils n'existent pas en objet et n'apparaissent pas en mode serveur seul. Sans ces blocs, l'écrasement fonctionne quand même, mais pas la double éponge ni l'éponge étirée.
+
+**Textures** : les modèles reprennent les textures vanilla de l'éponge et de l'éponge mouillée, sans nouvelle image. Les versions sèche et mouillée suivent l'eau contenue.
+- Éponge étirée : la texture est étirée sur 32 pixels le long de l'axe. La moitié la plus haute montre la moitié haute de la texture, l'autre moitié le bas, et la jonction est continue.
+- Double éponge : deux textures entières sont écrasées chacune sur 8 pixels le long de l'axe.
+
+Le sens suit l'axe du piston : les modèles sont tournés selon la propriété `facing`.
+
+**Tests automatiques** (`CheckSpongeGameTests`, dans les tests courants) :
+- l'éponge stocke ce qu'elle aspire ;
+- une éponge poussée garde son eau ;
+- écrasement avec place (40 niveaux rendus) et sans place (8 niveaux dans le piston, 12 en attente dans la case) ;
+- double éponge, puis séparation ;
+- éponge étirée, qui tient 128 niveaux, puis repoussée en un bloc ;
+- moitié détruite.
+
+Chaque test vérifie la conservation exacte.
 
 ## Questions ouvertes
 

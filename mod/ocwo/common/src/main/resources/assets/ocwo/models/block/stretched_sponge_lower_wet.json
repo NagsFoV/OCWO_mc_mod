@@ -1,0 +1,6 @@
+{
+ "parent": "ocwo:block/stretched_sponge_lower",
+ "textures": {
+  "all": "minecraft:block/wet_sponge"
+ }
+}
