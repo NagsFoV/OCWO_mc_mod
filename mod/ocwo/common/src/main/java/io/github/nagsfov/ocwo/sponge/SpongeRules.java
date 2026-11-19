@@ -28,6 +28,11 @@ public final class SpongeRules {
 	 * then further); without it, the piston does not push at all. Nothing ever goes into the piston head any more.
 	 */
 	public static final boolean CRUSH_NEEDS_ROOM_FOR_ALL = true;
+	/**
+	 * Valentin (19/11/2026): water is conserved in survival and adventure only. A sponge broken by a player in creative
+	 * mode drops nothing (as in vanilla) and its water disappears.
+	 */
+	public static final boolean CREATIVE_BREAK_DELETES_WATER = true;
 	/** Most cells looked at to give water back (from the side cells, breadth first, fixed order). */
 	public static final int RELEASE_CELLS = 256;
 

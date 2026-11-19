@@ -446,6 +446,29 @@ public final class SpongeLogic {
 
 	// ------------------------------------------------------------------ removal and items
 
+	/** The block a player in creative mode is breaking (level, position, game time), or none. */
+	private static ServerLevel creativeLevel;
+	private static long creativePos, creativeTime = Long.MIN_VALUE;
+
+	/**
+	 * A player in creative mode starts (or ends) breaking the block at pos. Water is conserved in survival and
+	 * adventure only: in creative mode, the water of a broken sponge disappears, as in vanilla (Valentin, 19/11/2026).
+	 */
+	public static void creativeBreak(ServerLevel level, BlockPos pos, boolean start) {
+		if (start) {
+			creativeLevel = level;
+			creativePos = pos.asLong();
+			creativeTime = level.getGameTime();
+		} else {
+			creativeLevel = null;
+		}
+	}
+
+	/** Is the block at pos being broken by a player in creative mode (this tick)? */
+	static boolean brokenInCreative(ServerLevel level, BlockPos pos) {
+		return SpongeRules.CREATIVE_BREAK_DELETES_WATER && creativeLevel == level && creativePos == pos.asLong() && creativeTime == level.getGameTime();
+	}
+
 	/**
 	 * A plain sponge went away (mined, burnt, exploded…, not moved by a piston): its water goes into the item it drops
 	 * ({@link #onDrop}); if it drops none (creative mode, explosion), the water comes back around its cell at the end
@@ -453,6 +476,10 @@ public final class SpongeLogic {
 	 */
 	public static void onSpongeGone(ServerLevel level, BlockPos pos, int units) {
 		if (quiet || units < U) return;
+		if (brokenInCreative(level, pos)) {
+			setUnits(level, pos, 0); // creative mode: its water disappears, nothing drops
+			return;
+		}
 		if (OcwoSponges.SPONGE_WATER == null) {
 			giveBack(level, pos, units);
 			return;
@@ -595,6 +622,10 @@ public final class SpongeLogic {
 			set(level, other, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
 			level.levelEvent(2001, other, Block.getId(os));
 		}
+		if (brokenInCreative(level, pos)) {
+			setUnits(level, pos, 0); // creative mode: its water disappears, nothing drops
+			return;
+		}
 		breakInto(level, pos, pair ? other : null, pool);
 	}
 
@@ -661,6 +692,10 @@ public final class SpongeLogic {
 	/** A double sponge was broken: two sponges drop, each with its half of the water. */
 	public static void onCompressedRemoved(ServerLevel level, BlockPos pos) {
 		if (quiet) return;
+		if (brokenInCreative(level, pos)) {
+			setUnits(level, pos, 0); // creative mode: its water disappears, nothing drops
+			return;
+		}
 		breakCompressed(level, pos);
 	}
 

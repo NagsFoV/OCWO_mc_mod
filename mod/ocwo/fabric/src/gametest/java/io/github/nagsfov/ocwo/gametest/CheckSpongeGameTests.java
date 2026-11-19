@@ -237,6 +237,43 @@ public class CheckSpongeGameTests {
 		});
 	}
 
+	/**
+	 * Creative mode (Valentin, 19/11/2026): water is conserved in survival and adventure only. A plain, a stretched and
+	 * a double sponge broken by a player in creative mode drop nothing and their water disappears.
+	 */
+	@GameTest(environment = ENV, maxTicks = 100, padding = 16)
+	public void creativeBreakDeletesWater(GameTestHelper h) {
+		shell(h, false);
+		put(h, PISTON, Blocks.AIR.defaultBlockState());
+		sponge(h, new BlockPos(1, 1, 1), 40);
+		put(h, new BlockPos(2, 1, 1), Blocks.SLIME_BLOCK.defaultBlockState()); // the slime first: held at both ends
+		put(h, new BlockPos(5, 1, 1), Blocks.SLIME_BLOCK.defaultBlockState());
+		stretched(h, new BlockPos(3, 1, 1), new BlockPos(4, 1, 1), Direction.EAST, 90);
+		put(h, new BlockPos(2, 1, 3), Blocks.OBSIDIAN.defaultBlockState());
+		put(h, new BlockPos(4, 1, 3), Blocks.OBSIDIAN.defaultBlockState());
+		sim(h).setUnits(h.absolutePos(new BlockPos(3, 1, 3)), 30 * U);
+		put(h, new BlockPos(3, 1, 3), OcwoSponges.COMPRESSED_SPONGE.defaultBlockState().setValue(CompressedSpongeBlock.FACING, Direction.WEST)
+				.setValue(CompressedSpongeBlock.WET, true));
+		long start = total(h);
+		var player = h.makeMockServerPlayerInLevel();
+		player.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+		player.gameMode.destroyBlock(h.absolutePos(new BlockPos(1, 1, 1)));
+		player.gameMode.destroyBlock(h.absolutePos(new BlockPos(3, 1, 1)));
+		player.gameMode.destroyBlock(h.absolutePos(new BlockPos(3, 1, 3)));
+		h.runAfterDelay(3, () -> {
+			player.discard();
+			for (BlockPos p : new BlockPos[]{new BlockPos(1, 1, 1), new BlockPos(3, 1, 1), new BlockPos(4, 1, 1), new BlockPos(3, 1, 3)}) {
+				if (OcwoSponges.isAnySponge(h.getBlockState(p))) h.fail("a sponge is still there at " + p + ": " + h.getBlockState(p));
+			}
+			if (!items(h).isEmpty()) h.fail("a creative player's break dropped sponges: " + items(h));
+			if (liquid(h) != 0) h.fail("the water should disappear, " + liquid(h) + " levels came out");
+			long now = total(h);
+			if (now != start - (40 + 90 + 30) * U) h.fail("expected the sponges' 160 levels to disappear: " + start + " -> " + now);
+			System.out.println("[OCWO-TEST] sponge creative break: " + (start - now) / U + " levels disappeared, nothing dropped");
+			h.succeed();
+		});
+	}
+
 	/** A wet sponge dried in a furnace: its water goes up as steam. */
 	@GameTest(environment = ENV, maxTicks = 400, padding = 16)
 	public void furnaceSendsWaterUp(GameTestHelper h) {

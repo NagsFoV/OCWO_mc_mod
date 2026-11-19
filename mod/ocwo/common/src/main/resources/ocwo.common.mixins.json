@@ -28,6 +28,7 @@
 		"_fluids.tweaks.WetSpongeBlockMixin",
 		"_fluids.tweaks.BlockSpongeMixin",
 		"_fluids.tweaks.FurnaceSpongeMixin",
+		"_fluids.tweaks.ServerPlayerGameModeMixin",
 		"_fluids.FlowingFluidCeilingMixin",
 		"GameRuleMapMixin",
 		"_fluids.LevelChunkRestMixin",

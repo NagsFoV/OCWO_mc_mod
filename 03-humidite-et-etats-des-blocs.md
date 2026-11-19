@@ -214,6 +214,7 @@ Règles de Valentin. Rien n'est créé ni détruit : chaque test vérifie que l'
 - Une éponge **écrasée** par un piston rend son eau et tombe sèche.
 - Une éponge étirée cassée donne un objet de 64 niveaux au plus ; le reste sort autour.
 - Une éponge compressée cassée donne deux objets, chacun avec sa moitié.
+- **Mode créatif** (19/11/2026) : la conservation ne s'applique qu'en survie et en aventure. Une éponge cassée par un joueur en créatif, normale, étirée ou compressée, ne lâche rien, comme en vanilla, et son eau disparaît.
 - Au **four**, l'eau part en vapeur vers les nuages. Un seau dans la case du combustible ne se remplit que si l'éponge tenait au moins 8 niveaux ; ces 8 niveaux vont alors dans le seau.
 
 ### Éponge compressée (double éponge) : tient sous condition
@@ -248,7 +249,7 @@ Exemple de Valentin, en ligne : piston collant› / éponge / slime / étirée /
 
 **Textures** : les modèles reprennent les textures vanilla de l'éponge et de l'éponge mouillée, sans nouvelle image (inchangé).
 
-**Tests automatiques** (`CheckSpongeGameTests`, 25 tests, chacun vérifie la conservation) : absorption ; pas d'échange avec le sol ; partage entre éponges voisines ; séchage dans le désert ; saut et atterrissage ; objet qui garde son eau et la rend une fois posé ; four ; écrasement (eau par les côtés, objet sec) ; pas de place → pas de poussée ; éponge sèche écrasée ; éponge devant une pierre écrasée ; slime qui suit l'éponge ; éponge contre une compressée écrasée ; compression puis séparation ; mur retiré ; compressée pressée de nouveau ; compressée poussée de côté (tient, ou se sépare) ; éponge étirée qui absorbe par une moitié puis est repoussée ; étirée qui perd le slime, le piston, ou les deux ; étirée cassée ; étirée de nouveau ; la ligne de Valentin.
+**Tests automatiques** (`CheckSpongeGameTests`, 26 tests, chacun vérifie la conservation, sauf celui du mode créatif qui vérifie que l'eau disparaît) : absorption ; pas d'échange avec le sol ; partage entre éponges voisines ; séchage dans le désert ; saut et atterrissage ; objet qui garde son eau et la rend une fois posé ; four ; écrasement (eau par les côtés, objet sec) ; pas de place → pas de poussée ; éponge sèche écrasée ; éponge devant une pierre écrasée ; slime qui suit l'éponge ; éponge contre une compressée écrasée ; compression puis séparation ; mur retiré ; compressée pressée de nouveau ; compressée poussée de côté (tient, ou se sépare) ; éponge étirée qui absorbe par une moitié puis est repoussée ; étirée qui perd le slime, le piston, ou les deux ; étirée cassée ; étirée de nouveau ; la ligne de Valentin ; éponges cassées en créatif (rien ne tombe, l'eau disparaît).
 
 ## Stabilisation (19/11/2026, branche `stabilisation`)
 
