@@ -290,6 +290,22 @@ Ce qui passe par la réserve :
 
 **Tests** : `CheckLedgerGameTests.zoneTotalStaysConstant` (un bassin naturel, un mur de terre naturelle dans un biome de plaine, une poche vide, une pierre qui garde de l'humidité ; le joueur mine la terre ; à chaque tick, eau + humidité + réserves + nuages constant ; au début et à la fin, le total de chaque zone touchée, compté comme la commande, constant) et `CheckRestGameTests.disturbanceWakesLocally` (la réserve ne paie que ce qu'elle a, le reste sort vraiment du bassin). Chacun tourne seul dans son lot, parce que le registre est partagé par tout ce qui est dans la zone.
 
+### Évaporation
+
+À chaque transfert d'humidité (un bloc absorbe de l'eau d'un bloc d'eau voisin, ou passe de l'humidité à un voisin), une partie s'évapore et monte dans les nuages : `ocwo:moisture_evaporation` pour cent (2 par défaut) dans un biome tempéré, multiplié par un facteur de biome :
+- température de base du biome : 0,5 pour un biome froid (0 et moins), 1 pour un biome tempéré (0,8), jusqu'à 1,75 pour un biome chaud (2) ;
+- doublé là où il ne pleut jamais (désert, savane, badlands) : 3,5 dans le désert, donc 7 % par transfert.
+
+Les fractions d'unité s'additionnent dans un accumulateur par zone (sauvegardé) : seules des unités entières montent, et rien n'est perdu. Le bloc qui reçoit reçoit le transfert moins ce qui s'évapore.
+
+**Autres eaux qui montent aux nuages** (avant, elles disparaissaient) :
+- l'eau que boit la terre labourée (et ses cultures) : les nuages de sa zone ;
+- l'éponge mouillée qui sèche dans le Nether, le seau d'eau vidé dans le Nether.
+
+**Dimensions** (règle de Valentin) : l'eau qui monte dans le Nether va dans les nuages de la zone de l'Overworld aux coordonnées correspondantes (×8). Celle qui monte dans l'End va dans les nuages d'une zone de l'Overworld tirée au hasard entre le point d'apparition du monde et un portail de l'End activé (le point d'apparition tant qu'aucun portail activé n'est connu ; les portails sont retenus quand on les active, pas ceux activés avant cette version). Les autres dimensions gardent leurs nuages.
+
+**Tests** : `CheckEvaporationGameTests` (facteurs de biome ; un bassin sur un sol de terre : eau + évaporation constant à chaque tick, les nuages grandissent de ce qui monte, et ce qui monte vaut le taux de la règle à l'arrondi près : 6,99 % pour 7,00 % attendus dans le désert du monde de test). Les autres tests d'humidité comptent l'eau évaporée là où elle a quitté le sol : les nuages d'une zone sont partagés entre les tests qui s'y trouvent.
+
 ## Questions ouvertes
 
 - La liste des blocs perméables : quels blocs pleins laissent passer l'eau, et à quelle vitesse ?

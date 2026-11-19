@@ -28,8 +28,33 @@ final class WaterCount {
 	/** Margin added around every measured box: moisture can soak into the blocks just outside the build. */
 	static final int MARGIN = 3;
 
-	/** Liquid water + moisture of the box (plus {@link #MARGIN}), in units. */
+	static {
+		// what evaporates is counted where it left the ground (the clouds of a zone are shared by the tests in it)
+		io.github.nagsfov.ocwo.fluids.WaterReserves.trackClouds = true;
+	}
+
+	/**
+	 * Liquid water + moisture of the box (plus {@link #MARGIN}) + what its blocks sent up to the clouds since the
+	 * tests started, in units. This is what must stay constant for a closed box.
+	 */
 	static long units(GameTestHelper h, int x0, int y0, int z0, int x1, int y1, int z1) {
+		return blockUnits(h, x0, y0, z0, x1, y1, z1) + sentUp(h, x0, y0, z0, x1, y1, z1);
+	}
+
+	/** Units its blocks sent up to the clouds (evaporation), box plus {@link #MARGIN}. */
+	static long sentUp(GameTestHelper h, int x0, int y0, int z0, int x1, int y1, int z1) {
+		return io.github.nagsfov.ocwo.fluids.WaterReserves.sentUpIn(h.absolutePos(new BlockPos(x0 - MARGIN, y0 - MARGIN, z0 - MARGIN)),
+				h.absolutePos(new BlockPos(x1 + MARGIN, y1 + MARGIN, z1 + MARGIN)));
+	}
+
+	/** Units of the moisture transfers its blocks made (box plus {@link #MARGIN}). */
+	static long transferred(GameTestHelper h, int x0, int y0, int z0, int x1, int y1, int z1) {
+		return io.github.nagsfov.ocwo.fluids.WaterReserves.transferredIn(h.absolutePos(new BlockPos(x0 - MARGIN, y0 - MARGIN, z0 - MARGIN)),
+				h.absolutePos(new BlockPos(x1 + MARGIN, y1 + MARGIN, z1 + MARGIN)));
+	}
+
+	/** Liquid water + moisture of the box (plus {@link #MARGIN}), in units (use with the ledger, which has the clouds). */
+	static long blockUnits(GameTestHelper h, int x0, int y0, int z0, int x1, int y1, int z1) {
 		x0 -= MARGIN; y0 -= MARGIN; z0 -= MARGIN; x1 += MARGIN; y1 += MARGIN; z1 += MARGIN;
 		long sum = 0;
 		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();

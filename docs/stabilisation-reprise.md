@@ -17,7 +17,7 @@ Aucun Gradle ni serveur de test bloqué. Une copie de sauvegarde de tout ce trav
 |---|---|---|
 | 1 | Moins de matériaux humides | fait, tests verts |
 | 2 | Registre d'eau par zone de 4×4 chunks | fait, tests verts |
-| 3 | Évaporation à chaque transfert d'humidité | à faire |
+| 3 | Évaporation à chaque transfert d'humidité | fait, tests verts |
 | 4 | Réservoirs abstraits pour les grandes masses d'eau au repos | à faire |
 | 5 | Sources de zone | à faire |
 
@@ -47,6 +47,16 @@ Tests : nouveau `CheckLedgerGameTests.zoneTotalStaysConstant` (seul dans son lot
 
 **Effet en jeu à surveiller** : sans réserve inventée, une tranchée creusée depuis une rivière ou un lac fait vraiment baisser l'eau naturelle, qui se réveille. Dans un vrai monde, ça peut réveiller beaucoup d'eau d'un coup (c'était la raison de la réserve). L'étape 4 (réservoirs abstraits) est là pour ça.
 
+## Étape 3 : évaporation à chaque transfert d'humidité
+
+Détail dans `03-humidite-et-etats-des-blocs.md`, « Évaporation ». Règle `ocwo:moisture_evaporation` (2 %), facteur de biome (0,5 froid, 1 tempéré, jusqu'à 3,5 chaud et sec), accumulateur fractionnaire par zone sauvegardé, unités entières versées dans les nuages.
+
+Pertes d'eau trouvées hors liste et branchées sur les nuages : terre labourée qui boit l'eau, éponge mouillée et seau d'eau dans le Nether. Règle des dimensions (correction de Valentin) : Nether → nuages de la zone Overworld aux coordonnées ×8 ; End → nuages d'une zone Overworld tirée au hasard entre le point d'apparition et un portail de l'End activé (point d'apparition si aucun portail connu ; les portails sont retenus quand on les active).
+
+Tests : nouveau `CheckEvaporationGameTests` (seul dans son lot). Les tests d'humidité comptent l'eau évaporée à l'endroit où elle a quitté le sol (suivi réservé aux tests). Le monde de test est un désert : 7 % par transfert dans les tests.
+
+**Restes connus** : la règle `ocwo:water_hot_fluid_evaporation` (eau contre la lave) existe mais n'est utilisée nulle part. La glace et la neige (eau fixe) ne sont pas encore dans le registre.
+
 ## Choix faits seul
 
 - **Poudre de béton** : gardée humide (capacité 1), alors qu'elle n'est pas dans la liste. Sans humidité, elle ne pourrait plus devenir du béton au contact de l'eau.
@@ -54,3 +64,5 @@ Tests : nouveau `CheckLedgerGameTests.zoneTotalStaysConstant` (seul dans son lot
 - **Anciennes réserves** : gardées telles quelles à la conversion (en unités). Elles contiennent l'eau comptée deux fois, mais aussi de la vraie eau versée dans l'eau naturelle, et on ne peut pas séparer les deux. À confirmer : les remettre à 0 dans les mondes existants.
 - **Ordre de paiement** : quand l'écoulement prend à de l'eau naturelle, la réserve de la zone paie d'abord (comme avant).
 - **Mesure de l'humidité de génération rendue** : ce qu'un bloc tiendrait au repos à sa place (même calcul que l'humidité de génération), plafonné à ce qu'il tient vraiment.
+- **Évaporation partout** : l'évaporation s'applique à chaque transfert, sous terre aussi. La question ouverte du document 01 (« seulement pour l'eau qui voit le ciel ? ») n'est pas tranchée : à décider.
+- **Transferts concernés** : absorption et transmission. Le suintement (un bloc saturé rend un niveau d'eau) n'évapore rien : c'est déjà de l'eau qui sort.

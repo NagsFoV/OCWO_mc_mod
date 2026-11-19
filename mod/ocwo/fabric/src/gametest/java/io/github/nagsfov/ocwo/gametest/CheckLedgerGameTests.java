@@ -155,13 +155,13 @@ public class CheckLedgerGameTests {
 		long[] reserveBeforeMining = {0};
 		h.onEachTick(() -> {
 			if (start[0] < 0) return;
-			long now = WaterCount.units(h, 0, 0, 0, X1, Y1, Z1) + ledger(h, zones);
+			long now = WaterCount.blockUnits(h, 0, 0, 0, X1, Y1, Z1) + ledger(h, zones);
 			if (now != start[0]) fail.accept("water not conserved (units): " + start[0] + " -> " + now + " at tick " + h.getTick());
 			for (long z : zones)
 				if (WaterReserves.get(level).reserveOf(z) < 0) fail.accept("negative reserve in zone " + z);
 		});
 		h.runAfterDelay(2, () -> {
-			start[0] = WaterCount.units(h, 0, 0, 0, X1, Y1, Z1) + ledger(h, zones);
+			start[0] = WaterCount.blockUnits(h, 0, 0, 0, X1, Y1, Z1) + ledger(h, zones);
 			zonesStart[0] = zoneTotals(h, zones, startDetail);
 			ledgerStart[0] = ledger(h, zones);
 			stoneStart[0] = sim.units(h.absolutePos(stone));

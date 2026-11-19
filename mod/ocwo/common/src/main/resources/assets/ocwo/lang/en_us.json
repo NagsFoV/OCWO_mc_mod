@@ -64,5 +64,7 @@
 	"block.ocwo.compressed_sponge": "Double Sponge",
 	"ocwo.water.ledger.zone": "Water ledger of zone %s, %s (blocks %s, %s to %s, %s), %s/16 chunks loaded:",
 	"ocwo.water.ledger.stocks": "visible water %s levels, block moisture %s levels, reserve %s levels, clouds %s levels",
-	"ocwo.water.ledger.total": "total: %s units (%s levels). It only changes when water crosses the edge of the zone or a chunk loads"
+	"ocwo.water.ledger.total": "total: %s units (%s levels). It only changes when water crosses the edge of the zone or a chunk loads",
+	"gamerule.ocwo.moisture_evaporation": "Moisture evaporation",
+	"gamerule.ocwo.moisture_evaporation.description": "Percent of each moisture transfer (water soaked up by a block, moisture passed to a neighbour) that evaporates into the clouds of the zone, in a temperate biome: half in cold biomes, up to 3.5 times more in hot, dry ones. 0 = none"
 }

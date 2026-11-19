@@ -71,6 +71,27 @@ public final class MoistureSimulation {
 		return p != null && p.holdsMoisture() && layer.get(chunk, pos) < p.capacity();
 	}
 
+	/**
+	 * Evaporation of a moisture transfer (03, "Évaporation"): {@code ocwo:moisture_evaporation} percent of it (2 % by
+	 * default) in a temperate biome, more where it is hot and dry, less where it is cold. Goes to the clouds.
+	 * Returns the whole units that evaporate now.
+	 */
+	private int evaporate(BlockPos pos, int units) {
+		double percent = OcwoFluidGameRules.MOISTURE_EVAPORATION == null ? 2.0 : level.getGameRules().get(OcwoFluidGameRules.MOISTURE_EVAPORATION);
+		if (percent <= 0) return 0;
+		return io.github.nagsfov.ocwo.fluids.WaterReserves.get(level).evaporate(level, pos, units, percent / 100.0 * evaporationFactor(pos));
+	}
+
+	/**
+	 * 1 in a temperate biome (base temperature 0.8, with rain or snow), from 0.5 in cold biomes (0.0 and below) up to
+	 * 1.75 in hot ones (2.0), doubled where it never rains: 3.5 in deserts.
+	 */
+	public double evaporationFactor(BlockPos pos) {
+		var biome = level.getBiome(pos).value();
+		double t = Math.max(0.5, Math.min(1.75, 0.5 + biome.getBaseTemperature() * 0.625));
+		return t * (biome.hasPrecipitation() ? 1.0 : 2.0);
+	}
+
 	/** Blocks stepped by the random ticks during the last tick. */
 	public int activeCount() {
 		return lastSteps;
@@ -360,7 +381,7 @@ public final class MoistureSimulation {
 			if (!canTakeWaterFrom(level.getBlockState(n))) continue;
 			if (fs.getType() instanceof FlowingFluid ff && fs.getAmount() > 0) {
 				FluidUtils.setFluid(level, n, ff, fs.getAmount() - 1, false);
-				h += U;
+				h += U - evaporate(pos, U);
 				break;
 			}
 		}
@@ -388,7 +409,7 @@ public final class MoistureSimulation {
 			x = Math.min(x, Math.min(h, c2 - h2));
 			if (x <= 0) continue;
 			h -= (int) x;
-			setUnits(n, h2 + (int) x);
+			setUnits(n, h2 + (int) x - evaporate(pos, (int) x));
 		}
 
 		// 3. seepage: saturated (or over capacity after a state change) and still supplied

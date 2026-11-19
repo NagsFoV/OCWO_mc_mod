@@ -159,6 +159,8 @@ public final class SpongeLogic {
 
 	/** Wet sponge placed where water evaporates (Nether): its water evaporates, as in vanilla. */
 	public static void evaporate(ServerLevel level, BlockPos pos) {
+		// the water goes up (Nether: to the clouds of the matching Overworld zone, see WaterReserves.toClouds)
+		io.github.nagsfov.ocwo.fluids.WaterReserves.toClouds(level, pos, sim(level).units(pos));
 		sim(level).setUnits(pos, 0);
 		set(level, pos, Blocks.SPONGE.defaultBlockState(), Block.UPDATE_ALL);
 		level.levelEvent(2009, pos, 0);

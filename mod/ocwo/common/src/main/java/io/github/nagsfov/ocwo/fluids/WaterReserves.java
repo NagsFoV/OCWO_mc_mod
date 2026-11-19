@@ -8,7 +8,9 @@ import io.github.nagsfov.ocwo.moisture.MoistureLayer;
 import io.github.nagsfov.ocwo.moisture.MoistureProps;
 import io.github.nagsfov.ocwo.moisture.MoistureSimulation;
 import io.github.nagsfov.ocwo.platform.Services;
+import it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2LongLinkedOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.LongArrayTag;
@@ -109,6 +111,115 @@ public final class WaterReserves extends SavedData {
 		return clouds.get(zone);
 	}
 
+	// ------------------------------------------------------------------ to the clouds
+
+	/** Tests: where water went up (block pos -> units), when {@link #trackClouds} is on. */
+	public static volatile boolean trackClouds;
+	private static final Long2LongOpenHashMap SENT_UP_AT = new Long2LongOpenHashMap();
+	/** Tests: moisture transfers that could evaporate (block pos -> units), when {@link #trackClouds} is on. */
+	private static final Long2LongOpenHashMap TRANSFERRED_AT = new Long2LongOpenHashMap();
+
+	/**
+	 * Water that leaves the ground for the clouds at pos (evaporation, water drunk by farmland, water that boils away
+	 * in the Nether...). Overworld (and other dimensions): the clouds of the zone of pos. Nether: the clouds of the
+	 * Overworld zone at the matching coordinates (x 8). End: the clouds of an Overworld zone drawn at random between the
+	 * world spawn and an activated End portal (the spawn when none is known). Nothing is lost.
+	 */
+	public static void toClouds(ServerLevel level, BlockPos pos, long units) {
+		if (units <= 0) return;
+		if (trackClouds) synchronized (SENT_UP_AT) {
+			SENT_UP_AT.addTo(pos.asLong(), units);
+		}
+		ServerLevel overworld = level.getServer().overworld();
+		BlockPos at = pos;
+		ServerLevel to = level;
+		if (level.dimension() == net.minecraft.world.level.Level.NETHER && overworld != null) {
+			to = overworld;
+			at = new BlockPos(pos.getX() * 8, pos.getY(), pos.getZ() * 8);
+		} else if (level.dimension() == net.minecraft.world.level.Level.END && overworld != null) {
+			to = overworld;
+			at = get(overworld).endWaterTarget(overworld);
+		}
+		get(to).addClouds(at, units);
+	}
+
+	private void addClouds(BlockPos pos, long units) {
+		long z = zone(pos);
+		clouds.put(z, clouds.get(z) + units);
+		setDirty();
+	}
+
+	/** Tests: units sent up to the clouds from the blocks of a box (absolute corners, inclusive). */
+	public static long sentUpIn(BlockPos a, BlockPos b) {
+		return sumIn(SENT_UP_AT, a, b);
+	}
+
+	/** Tests: units of the moisture transfers made by the blocks of a box (absolute corners, inclusive). */
+	public static long transferredIn(BlockPos a, BlockPos b) {
+		return sumIn(TRANSFERRED_AT, a, b);
+	}
+
+	private static long sumIn(Long2LongOpenHashMap map, BlockPos a, BlockPos b) {
+		int x0 = Math.min(a.getX(), b.getX()), x1 = Math.max(a.getX(), b.getX());
+		int y0 = Math.min(a.getY(), b.getY()), y1 = Math.max(a.getY(), b.getY());
+		int z0 = Math.min(a.getZ(), b.getZ()), z1 = Math.max(a.getZ(), b.getZ());
+		long sum = 0;
+		synchronized (SENT_UP_AT) {
+			for (var e : map.long2LongEntrySet()) {
+				int x = BlockPos.getX(e.getLongKey()), y = BlockPos.getY(e.getLongKey()), z = BlockPos.getZ(e.getLongKey());
+				if (x >= x0 && x <= x1 && y >= y0 && y <= y1 && z >= z0 && z <= z1) sum += e.getLongValue();
+			}
+		}
+		return sum;
+	}
+
+	/** Fraction of a unit already evaporated in the zone, not yet sent to the clouds (saved, never water). */
+	private final Long2DoubleOpenHashMap evaporating = new Long2DoubleOpenHashMap();
+
+	/**
+	 * Evaporation of a moisture transfer at pos (03, "Évaporation"): {@code rate} of the {@code units} goes up, the
+	 * fractions of units adding up in the zone. Returns the whole units that go up now (to take off the transfer); they
+	 * are sent to the clouds ({@link #toClouds}).
+	 */
+	public int evaporate(ServerLevel level, BlockPos pos, int units, double rate) {
+		if (units <= 0 || rate <= 0) return 0;
+		if (trackClouds) synchronized (SENT_UP_AT) {
+			TRANSFERRED_AT.addTo(pos.asLong(), units);
+		}
+		long z = zone(pos);
+		double e = evaporating.get(z) + units * rate;
+		int whole = (int) Math.min(units, Math.floor(e));
+		evaporating.put(z, e - whole);
+		setDirty();
+		if (whole > 0) toClouds(level, pos, whole);
+		return whole;
+	}
+
+	// ------------------------------------------------------------------ End portals (Overworld)
+
+	/** Activated End portals of the Overworld (one position per portal), for the water destroyed in the End. */
+	private final it.unimi.dsi.fastutil.longs.LongArrayList endPortals = new it.unimi.dsi.fastutil.longs.LongArrayList();
+
+	/** A block changed: an End portal block placed in the Overworld is remembered (once per portal). */
+	public static void onBlockChanged(ServerLevel level, BlockPos pos, BlockState oldState, BlockState newState) {
+		if (!newState.is(net.minecraft.world.level.block.Blocks.END_PORTAL) || oldState.is(net.minecraft.world.level.block.Blocks.END_PORTAL)) return;
+		if (level.dimension() != net.minecraft.world.level.Level.OVERWORLD) return;
+		WaterReserves r = get(level);
+		for (int i = 0; i < r.endPortals.size(); i++) if (BlockPos.of(r.endPortals.getLong(i)).distManhattan(pos) <= 8) return;
+		r.endPortals.add(pos.asLong());
+		r.setDirty();
+	}
+
+	/** Where water destroyed in the End goes up: a point drawn between the spawn and an activated End portal. */
+	private BlockPos endWaterTarget(ServerLevel overworld) {
+		BlockPos spawn = overworld.getRespawnData().pos();
+		if (endPortals.isEmpty()) return spawn;
+		var random = overworld.getRandom();
+		BlockPos portal = BlockPos.of(endPortals.getLong(random.nextInt(endPortals.size())));
+		double t = random.nextDouble();
+		return BlockPos.containing(spawn.getX() + (portal.getX() - spawn.getX()) * t, spawn.getY(), spawn.getZ() + (portal.getZ() - spawn.getZ()) * t);
+	}
+
 	/** Sum of the reserves, in units (tests, conservation). */
 	public long totalUnits() {
 		long s = 0;
@@ -206,6 +317,10 @@ public final class WaterReserves extends SavedData {
 		long[] ck = root.getLongArray("cloudZones").orElse(new long[0]);
 		long[] cv = root.getLongArray("clouds").orElse(new long[0]);
 		for (int i = 0; i < Math.min(ck.length, cv.length); i++) r.clouds.put(ck[i], cv[i]);
+		long[] ek = root.getLongArray("evaporatingZones").orElse(new long[0]);
+		long[] ev = root.getLongArray("evaporating").orElse(new long[0]);
+		for (int i = 0; i < Math.min(ek.length, ev.length); i++) r.evaporating.put(ek[i], Double.longBitsToDouble(ev[i]));
+		r.endPortals.addElements(0, root.getLongArray("endPortals").orElse(new long[0]));
 		return r;
 	}
 
@@ -215,6 +330,11 @@ public final class WaterReserves extends SavedData {
 		root.put("units", new LongArrayTag(reserves.values().toLongArray()));
 		root.put("cloudZones", new LongArrayTag(clouds.keySet().toLongArray()));
 		root.put("clouds", new LongArrayTag(clouds.values().toLongArray()));
+		long[] ek = evaporating.keySet().toLongArray(), ev = new long[ek.length];
+		for (int i = 0; i < ek.length; i++) ev[i] = Double.doubleToLongBits(evaporating.get(ek[i]));
+		root.put("evaporatingZones", new LongArrayTag(ek));
+		root.put("evaporating", new LongArrayTag(ev));
+		root.put("endPortals", new LongArrayTag(endPortals.toLongArray()));
 		return root;
 	}
 }

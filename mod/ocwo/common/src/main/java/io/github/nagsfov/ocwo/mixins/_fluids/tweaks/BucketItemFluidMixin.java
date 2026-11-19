@@ -133,6 +133,9 @@ public abstract class BucketItemFluidMixin extends Item {
 				for (int l = 0; l < 8; l++) {
 					level.addParticle(ParticleTypes.LARGE_SMOKE, i + Math.random(), j + Math.random(), k + Math.random(), 0.0, 0.0, 0.0);
 				}
+				// the water goes up (Nether: to the clouds of the matching Overworld zone, see WaterReserves.toClouds)
+				if (level instanceof net.minecraft.server.level.ServerLevel sl)
+					io.github.nagsfov.ocwo.fluids.WaterReserves.toClouds(sl, blockPos, (long) FluidUtils.MAX_LEVEL * io.github.nagsfov.ocwo.moisture.Moisture.UNITS_PER_LEVEL);
 				cir.setReturnValue(true);
 			} else if (!level.isClientSide()) {
 				FluidDistribution space = FluidUtils.findSpaceForFluid((ServerLevel) level, blockPos, flowingFluid, FluidUtils.MAX_LEVEL, FluidUtils.FS_GETTER);

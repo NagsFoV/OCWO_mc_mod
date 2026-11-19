@@ -707,6 +707,8 @@ public final class FluidUtils {
 						if (intake > 0 && random.nextFloat() < intake * wetLevels && fs2.getType() instanceof FlowingFluid ff) {
 							BlockState bs2 = world.getBlockState(p2);
 							setFluid(world, p2, bs2, fs2, ff, fs2.getAmount() - 1, false);
+							// the farmland drinks it (and its crops give it to the air): the clouds of the zone get it
+							WaterReserves.toClouds(world, p2, io.github.nagsfov.ocwo.moisture.Moisture.UNITS_PER_LEVEL);
 						}
 						return true;
 					} else {

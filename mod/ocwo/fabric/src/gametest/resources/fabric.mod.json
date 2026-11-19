@@ -14,6 +14,7 @@
 			"io.github.nagsfov.ocwo.gametest.CheckMoistureRandomGameTests",
 			"io.github.nagsfov.ocwo.gametest.CheckSpongeGameTests",
 			"io.github.nagsfov.ocwo.gametest.CheckLedgerGameTests",
+			"io.github.nagsfov.ocwo.gametest.CheckEvaporationGameTests",
 			"io.github.nagsfov.ocwo.gametest.PerformanceGameTests",
 			"io.github.nagsfov.ocwo.gametest.ToolsGameTests",
 			"io.github.nagsfov.ocwo.gametest.VesselsGameTests"

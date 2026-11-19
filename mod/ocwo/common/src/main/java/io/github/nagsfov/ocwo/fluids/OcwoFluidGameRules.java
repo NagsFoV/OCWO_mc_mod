@@ -30,6 +30,10 @@ public class OcwoFluidGameRules {
 	public static final GameRule<Integer> MOISTURE_RANDOM_TICKS = enabled()
 			? Services.PLATFORM.registerIntRule("moisture_random_ticks", 3, 0, 4096) : null;
 
+	/** Evaporation of moisture transfers, percent in a temperate biome (more if hot and dry): goes to the clouds. */
+	public static final GameRule<Double> MOISTURE_EVAPORATION = enabled()
+			? Services.PLATFORM.registerDoubleRule("moisture_evaporation", 2.0, 0D, 100D) : null;
+
 	/** TEST ONLY, NOT CONSERVATIVE: vanilla rain adds moisture to the top blocks (no clouds yet). */
 	public static final GameRule<Boolean> RAIN_MOISTURE_TEST = enabled()
 			? Services.PLATFORM.registerBooleanRule("rain_moisture_test", false) : null;

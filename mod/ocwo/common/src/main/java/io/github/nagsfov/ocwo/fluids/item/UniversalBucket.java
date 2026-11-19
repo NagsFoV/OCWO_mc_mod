@@ -102,6 +102,9 @@ public class UniversalBucket extends Item {
 					level.addParticle(ParticleTypes.LARGE_SMOKE, i + Math.random(), j + Math.random(), k + Math.random(), 0.0, 0.0, 0.0);
 				}
 				evaporates = true;
+				// the water goes up (Nether: to the clouds of the matching Overworld zone, see WaterReserves.toClouds)
+				if (level instanceof net.minecraft.server.level.ServerLevel sl)
+					io.github.nagsfov.ocwo.fluids.WaterReserves.toClouds(sl, blockPos, (long) content.levels() * io.github.nagsfov.ocwo.moisture.Moisture.UNITS_PER_LEVEL);
 			} else {
 				SoundEvent se = Services.PLATFORM.getFluidEmptySound(content.fluid());
 				player.playSound(se, 1.0f, 1.0f);
