@@ -1,0 +1,6 @@
+{
+  "type": "minecraft:game_rules",
+  "rules": {
+    "ocwo:reservoir_min_blocks": 64
+  }
+}

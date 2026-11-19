@@ -18,7 +18,7 @@ Aucun Gradle ni serveur de test bloqué. Une copie de sauvegarde de tout ce trav
 | 1 | Moins de matériaux humides | fait, tests verts |
 | 2 | Registre d'eau par zone de 4×4 chunks | fait, tests verts |
 | 3 | Évaporation à chaque transfert d'humidité | fait, tests verts |
-| 4 | Réservoirs abstraits pour les grandes masses d'eau au repos | à faire |
+| 4 | Réservoirs abstraits pour les grandes masses d'eau au repos | fait, tests verts |
 | 5 | Sources de zone | à faire |
 
 ## Étape 1 : moins de matériaux humides
@@ -57,6 +57,16 @@ Tests : nouveau `CheckEvaporationGameTests` (seul dans son lot). Les tests d'hum
 
 **Restes connus** : la règle `ocwo:water_hot_fluid_evaporation` (eau contre la lave) existe mais n'est utilisée nulle part. La glace et la neige (eau fixe) ne sont pas encore dans le registre.
 
+## Étape 4 : réservoirs abstraits
+
+Détail et mesures dans `06-pression.md`, « Réservoirs abstraits ». Une grande masse d'eau naturelle au repos (au moins 8 blocs, règle `ocwo:reservoir_min_blocks`) paie avec sa propre surface ce que l'écoulement ou la pression lui prend, quand la réserve ne peut pas : sa surface baisse d'un niveau à la fois, régulièrement, sans rien réveiller. Les transferts de pression passent maintenant aussi par la réserve et les réservoirs.
+
+**Seuil de 8 blocs mesuré : il tient.** Pour un grand lac, 8 ou 64 donnent le même résultat. Sous le seuil, une masse coule normalement et ne coûte presque rien. La vraie limite est ailleurs : la recherche regarde au plus 4 096 blocs de surface (64×64), donc pour un océan la baisse reste locale autour de la sortie.
+
+Tests : nouveau `CheckReservoirGameTests` (seul dans son lot) ; scénarios de performance `reservoirTrench8`, `reservoirTrench64`, `reservoirTrenchOff` (`gradlew.bat :fabric:runGameTestPerf`).
+
+**Fuite corrigée en passant** (trouvée par le test de registre) : une tâche d'écoulement qui faisait plusieurs mouvements depuis le même bloc d'eau naturelle faisait payer le deuxième deux fois, et l'égalisation pouvait créer de l'eau. Elles paient maintenant exactement le changement décidé.
+
 ## Choix faits seul
 
 - **Poudre de béton** : gardée humide (capacité 1), alors qu'elle n'est pas dans la liste. Sans humidité, elle ne pourrait plus devenir du béton au contact de l'eau.
@@ -66,3 +76,6 @@ Tests : nouveau `CheckEvaporationGameTests` (seul dans son lot). Les tests d'hum
 - **Mesure de l'humidité de génération rendue** : ce qu'un bloc tiendrait au repos à sa place (même calcul que l'humidité de génération), plafonné à ce qu'il tient vraiment.
 - **Évaporation partout** : l'évaporation s'applique à chaque transfert, sous terre aussi. La question ouverte du document 01 (« seulement pour l'eau qui voit le ciel ? ») n'est pas tranchée : à décider.
 - **Transferts concernés** : absorption et transmission. Le suintement (un bloc saturé rend un niveau d'eau) n'évapore rien : c'est déjà de l'eau qui sort.
+- **Réservoirs : ordre de paiement** : la réserve de la zone d'abord, puis la masse d'eau elle-même. L'eau versée dans de l'eau naturelle va toujours à la réserve (la surface d'un lac ne remonte pas toute seule).
+- **Réservoirs : quels blocs baissent** : les blocs de surface les plus hauts, à égalité les plus proches de la sortie, jamais le bloc qui perd l'eau lui-même, seulement des blocs d'eau simples au repos (pas d'algues ni de blocs waterloggés).
+- **Réservoirs : la pression aussi** : sans ça, la pression vidait l'eau naturelle réveillée pour de vrai et le réveil gagnait tout le lac.

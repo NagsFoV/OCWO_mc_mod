@@ -173,7 +173,7 @@ public final class EqualizationFluidTask extends AbstractFluidTask {
 				l = MAX_LEVEL;
 			}
 			if (l != e.getIntValue()) {
-				setFluid(p, l);
+				setFluidSeen(p, e.getIntValue(), l);
 			}
 			fluidTicks.done(p);
 		}
@@ -191,7 +191,7 @@ public final class EqualizationFluidTask extends AbstractFluidTask {
 				}
 			}
 			if (l != e.getIntValue()) {
-				setFluid(p, l);
+				setFluidSeen(p, e.getIntValue(), l);
 			}
 			fluidTicks.done(p);
 		}

@@ -37,6 +37,18 @@ public abstract sealed class AbstractFluidTask implements Runnable permits Class
 		setFluid(to, getBlockState(to), getFluidState(to), amount, false);
 	}
 
+	/**
+	 * OCWO: sets the fluid at {@code to} to {@code amount}, the task having seen {@code seen} levels there. Natural water
+	 * kept at its level by its reserve or reservoir (or lowered by a reservoir meanwhile) may show another level: the
+	 * change paid or given is the one the task decided (seen -> amount).
+	 */
+	protected final void setFluidSeen(BlockPos to, int seen, int amount) {
+		FluidState now = getFluidState(to);
+		FluidState toFs = now;
+		if ((now.isEmpty() || isThis(now)) && now.getAmount() != seen) toFs = FluidUtils.getFluidState(fluid, seen, false);
+		setFluid(to, getBlockState(to), toFs, amount, false);
+	}
+
 	protected final void setFluid(BlockPos to, BlockState toState, FluidState toFs, int amount, boolean falling) {
 		fluidTicks.onBlockUpdate(to, fluid.getTickDelay(world));
 		FluidUtils.setFluid(world, to, toState, toFs, fluid, amount, falling);

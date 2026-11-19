@@ -53,5 +53,7 @@
 	"ocwo.water.ledger.stocks": "eau visible %s niveaux, humidité des blocs %s niveaux, réserve %s niveaux, nuages %s niveaux",
 	"ocwo.water.ledger.total": "total : %s unités (%s niveaux). Il ne change que quand de l'eau passe le bord de la zone ou qu'un chunk se charge",
 	"gamerule.ocwo.moisture_evaporation": "Évaporation de l'humidité",
-	"gamerule.ocwo.moisture_evaporation.description": "Pourcentage de chaque transfert d'humidité (eau absorbée par un bloc, humidité passée à un voisin) qui s'évapore vers les nuages de la zone, en biome tempéré : moitié moins en biome froid, jusqu'à 3,5 fois plus en biome chaud et sec. 0 = aucune"
+	"gamerule.ocwo.moisture_evaporation.description": "Pourcentage de chaque transfert d'humidité (eau absorbée par un bloc, humidité passée à un voisin) qui s'évapore vers les nuages de la zone, en biome tempéré : moitié moins en biome froid, jusqu'à 3,5 fois plus en biome chaud et sec. 0 = aucune",
+	"gamerule.ocwo.reservoir_min_blocks": "Plus petit réservoir abstrait (blocs)",
+	"gamerule.ocwo.reservoir_min_blocks.description": "Une masse d'eau naturelle au repos d'au moins ce nombre de blocs est un seul réservoir : l'eau qu'on lui prend est retirée de sa surface, qui baisse d'un coup régulier, sans réveiller toute la masse. Les masses plus petites s'écoulent normalement. 0 = aucun réservoir"
 }

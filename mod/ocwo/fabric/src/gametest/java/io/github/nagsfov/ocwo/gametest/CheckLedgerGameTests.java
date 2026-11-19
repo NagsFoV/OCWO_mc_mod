@@ -153,10 +153,22 @@ public class CheckLedgerGameTests {
 		int[] stoneStart = {0};
 		StringBuilder startDetail = new StringBuilder();
 		long[] reserveBeforeMining = {0};
+		java.util.Map<String, String>[] snap = new java.util.Map[]{null};
+		long[] prevLedger = {0}, prevPaid = {0};
 		h.onEachTick(() -> {
 			if (start[0] < 0) return;
 			long now = WaterCount.blockUnits(h, 0, 0, 0, X1, Y1, Z1) + ledger(h, zones);
-			if (now != start[0]) fail.accept("water not conserved (units): " + start[0] + " -> " + now + " at tick " + h.getTick());
+			java.util.Map<String, String> s = WaterCount.snapshot(h, 0, 0, 0, X1, Y1, Z1);
+			if (now != start[0]) {
+				// diagnostics: what changed during the tick that broke the balance
+				if (snap[0] != null) WaterCount.printDiff(snap[0], s);
+				System.out.println("[OCWO-DIFF] ledger " + prevLedger[0] + " -> " + ledger(h, zones) + ", reservoir levels paid "
+						+ (io.github.nagsfov.ocwo.fluids.WaterReservoirs.levelsPaid - prevPaid[0]));
+				fail.accept("water not conserved (units): " + start[0] + " -> " + now + " at tick " + h.getTick());
+			}
+			snap[0] = s;
+			prevLedger[0] = ledger(h, zones);
+			prevPaid[0] = io.github.nagsfov.ocwo.fluids.WaterReservoirs.levelsPaid;
 			for (long z : zones)
 				if (WaterReserves.get(level).reserveOf(z) < 0) fail.accept("negative reserve in zone " + z);
 		});

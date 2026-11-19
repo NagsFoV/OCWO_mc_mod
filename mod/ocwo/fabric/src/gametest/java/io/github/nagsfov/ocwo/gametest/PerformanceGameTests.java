@@ -217,4 +217,124 @@ public class PerformanceGameTests {
 			h.succeed();
 		});
 	}
+
+	// ------------------------------------------------------------------ abstract reservoirs (stabilisation, step 4)
+
+	/**
+	 * A natural lake of 48 x 48 x 4 (9 216 blocks, more than one reservoir search looks at), written like the world
+	 * generation, and an empty basin of 16 x 16 x 2 behind a wall; the player opens the wall (3 blocks wide). Reports
+	 * the water code time, the awake water, the reservoir searches and how evenly the lake surface went down.
+	 * Variants: reservoirs from 8 blocks (default), from 64 blocks, and none (the lake flows for real).
+	 */
+	private static void reservoirTrench(GameTestHelper h, String name) {
+		net.minecraft.server.level.ServerLevel level = h.getLevel();
+		int n = 48, bx0 = n + 3, bn = 16, ticks = 1_200;
+		DrainScenario.forceChunks(h, bx0 + bn + 1, true);
+		net.minecraft.world.level.block.state.BlockState obs = Blocks.OBSIDIAN.defaultBlockState(), air = Blocks.AIR.defaultBlockState(),
+				water = Blocks.WATER.defaultBlockState();
+		for (int x = 0; x <= bx0 + bn; x++)
+			for (int z = 0; z <= n + 1; z++)
+				for (int y = 0; y <= 6; y++) {
+					boolean basin = x >= bx0 && x < bx0 + bn && z >= 1 && z <= bn && y >= 1 && y <= 2;
+					level.setBlock(h.absolutePos(new BlockPos(x, y, z)), basin ? air : obs, 2);
+				}
+		for (int x = 1; x <= n; x++)
+			for (int z = 1; z <= n; z++)
+				for (int y = 1; y <= 6; y++) {
+					BlockPos p = h.absolutePos(new BlockPos(x, y, z));
+					level.getChunkAt(p).setBlockState(p, y <= 4 ? water : air, 0); // like the generation
+				}
+		long[] start = {0};
+		int[] maxAwake = {0};
+		long[] s0 = new long[3];
+		h.runAfterDelay(5, () -> {
+			start[0] = waterLevels(h, bx0 + bn, n + 1);
+			s0[0] = io.github.nagsfov.ocwo.fluids.WaterReservoirs.searches;
+			s0[1] = io.github.nagsfov.ocwo.fluids.WaterReservoirs.payments;
+			s0[2] = io.github.nagsfov.ocwo.fluids.WaterReservoirs.visited;
+			// the player opens the wall between the lake and the basin, 3 blocks wide
+			for (int z = 7; z <= 9; z++) level.setBlock(h.absolutePos(new BlockPos(n + 1, 1, z)), air, net.minecraft.world.level.block.Block.UPDATE_ALL);
+			for (int z = 7; z <= 9; z++) level.setBlock(h.absolutePos(new BlockPos(n + 2, 1, z)), air, net.minecraft.world.level.block.Block.UPDATE_ALL);
+			io.github.nagsfov.ocwo.util.OcwoProfiler.start(level);
+		});
+		long[] last = new long[3];
+		h.onEachTick(() -> {
+			if (h.getTick() % 20 == 0) maxAwake[0] = Math.max(maxAwake[0], io.github.nagsfov.ocwo.fluids.WaterRest.awakeAround(level, h.absolutePos(new BlockPos(n / 2, 1, n / 2)), 4));
+			long se = io.github.nagsfov.ocwo.fluids.WaterReservoirs.searches, pa = io.github.nagsfov.ocwo.fluids.WaterReservoirs.payments,
+					mv = io.github.nagsfov.ocwo.util.OcwoProfiler.pressureMoves();
+			if (h.getTick() > 6 && io.github.nagsfov.ocwo.util.OcwoProfiler.lastMillis() > 50)
+				System.out.println(String.format(java.util.Locale.ROOT, "[OCWO-PERF]   slow tick %d: %.1f ms, %d searches, %d payments, %d pressure moves; so far %d small, %d no surface, %d plan fails; last search at %s (relative %s)",
+						h.getTick(), io.github.nagsfov.ocwo.util.OcwoProfiler.lastMillis(), se - last[0], pa - last[1], mv - last[2],
+						io.github.nagsfov.ocwo.fluids.WaterReservoirs.smallBodies, io.github.nagsfov.ocwo.fluids.WaterReservoirs.noSurface,
+						io.github.nagsfov.ocwo.fluids.WaterReservoirs.planFails, BlockPos.of(io.github.nagsfov.ocwo.fluids.WaterReservoirs.lastSearchPos).toShortString(),
+						BlockPos.of(io.github.nagsfov.ocwo.fluids.WaterReservoirs.lastSearchPos).subtract(h.absolutePos(BlockPos.ZERO)).toShortString()));
+			last[0] = se;
+			last[1] = pa;
+			last[2] = mv;
+		});
+		h.runAfterDelay(5 + ticks, () -> {
+			io.github.nagsfov.ocwo.util.OcwoProfiler.stop();
+			long reserve = 0;
+			java.util.Set<Long> zones = new java.util.HashSet<>();
+			for (int x : new int[]{0, bx0 + bn})
+				for (int z : new int[]{0, n + 1}) {
+					long zone = io.github.nagsfov.ocwo.fluids.WaterReserves.zone(h.absolutePos(new BlockPos(x, 0, z)));
+					if (zones.add(zone)) reserve += io.github.nagsfov.ocwo.fluids.WaterReserves.get(level).reserveOf(zone);
+				}
+			int basin = 0;
+			for (int x = bx0; x < bx0 + bn; x++)
+				for (int z = 1; z <= bn; z++)
+					for (int y = 1; y <= 2; y++) basin += WaterCount.liquidLevels(h, new BlockPos(x, y, z));
+			// lake surface: top layer near the opening (x > 40, z < 16) and far from it (x < 8, z > 40)
+			int nearLo = 99, nearHi = -1, farLo = 99, farHi = -1, lakeTop = 0;
+			for (int x = 1; x <= n; x++)
+				for (int z = 1; z <= n; z++) {
+					int top = 0;
+					for (int y = 4; y >= 1 && top == 0; y--) {
+						int l = WaterCount.liquidLevels(h, new BlockPos(x, y, z));
+						if (l > 0) top = (y - 1) * 8 + l;
+					}
+					lakeTop += top;
+					if (x > 40 && z < 16) { nearLo = Math.min(nearLo, top); nearHi = Math.max(nearHi, top); }
+					if (x < 8 && z > 40) { farLo = Math.min(farLo, top); farHi = Math.max(farHi, top); }
+				}
+			int awake = io.github.nagsfov.ocwo.fluids.WaterRest.awakeAround(level, h.absolutePos(new BlockPos(n / 2, 1, n / 2)), 4);
+			long now = waterLevels(h, bx0 + bn, n + 1);
+			long searches = io.github.nagsfov.ocwo.fluids.WaterReservoirs.searches - s0[0];
+			long payments = io.github.nagsfov.ocwo.fluids.WaterReservoirs.payments - s0[1];
+			long visited = io.github.nagsfov.ocwo.fluids.WaterReservoirs.visited - s0[2];
+			System.out.println(String.format(java.util.Locale.ROOT,
+					"[OCWO-PERF] %s: %d ticks, water code %.2f ms/tick avg, %.1f ms worst; basin %d levels; awake water %d now, %d at most;"
+							+ " reservoir: %d payments, %d searches (%.0f blocks each); lake surface height near %d..%d, far %d..%d (start 32);"
+							+ " water %d -> %d levels + reserve %d units",
+					name, io.github.nagsfov.ocwo.util.OcwoProfiler.ticks(), io.github.nagsfov.ocwo.util.OcwoProfiler.averageMillis(),
+					io.github.nagsfov.ocwo.util.OcwoProfiler.maxMillis(), basin, awake, maxAwake[0], payments, searches,
+					searches == 0 ? 0.0 : visited / (double) searches, nearLo, nearHi, farLo, farHi, start[0], now, reserve));
+			DrainScenario.forceChunks(h, bx0 + bn + 1, false);
+			h.succeed();
+		});
+	}
+
+	private static long waterLevels(GameTestHelper h, int x1, int z1) {
+		long sum = 0;
+		for (int x = 0; x <= x1; x++)
+			for (int z = 0; z <= z1; z++)
+				for (int y = 0; y <= 6; y++) sum += WaterCount.liquidLevels(h, new BlockPos(x, y, z));
+		return sum;
+	}
+
+	@GameTest(environment = "ocwo-gametest:perf_reservoir_8", maxTicks = 1_400, padding = 32)
+	public void reservoirTrench8(GameTestHelper h) {
+		reservoirTrench(h, "lake + trench, reservoirs from 8 blocks");
+	}
+
+	@GameTest(environment = "ocwo-gametest:perf_reservoir_64", maxTicks = 1_400, padding = 32)
+	public void reservoirTrench64(GameTestHelper h) {
+		reservoirTrench(h, "lake + trench, reservoirs from 64 blocks");
+	}
+
+	@GameTest(environment = "ocwo-gametest:perf_reservoir_off", maxTicks = 1_400, padding = 32)
+	public void reservoirTrenchOff(GameTestHelper h) {
+		reservoirTrench(h, "lake + trench, no reservoirs");
+	}
 }

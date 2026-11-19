@@ -34,6 +34,10 @@ public class OcwoFluidGameRules {
 	public static final GameRule<Double> MOISTURE_EVAPORATION = enabled()
 			? Services.PLATFORM.registerDoubleRule("moisture_evaporation", 2.0, 0D, 100D) : null;
 
+	/** Smallest body of natural water at rest that pays out of its own surface (abstract reservoir); 0 = none. */
+	public static final GameRule<Integer> RESERVOIR_MIN_BLOCKS = enabled()
+			? Services.PLATFORM.registerIntRule("reservoir_min_blocks", 8, 0, 1_000_000) : null;
+
 	/** TEST ONLY, NOT CONSERVATIVE: vanilla rain adds moisture to the top blocks (no clouds yet). */
 	public static final GameRule<Boolean> RAIN_MOISTURE_TEST = enabled()
 			? Services.PLATFORM.registerBooleanRule("rain_moisture_test", false) : null;

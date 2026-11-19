@@ -66,5 +66,7 @@
 	"ocwo.water.ledger.stocks": "visible water %s levels, block moisture %s levels, reserve %s levels, clouds %s levels",
 	"ocwo.water.ledger.total": "total: %s units (%s levels). It only changes when water crosses the edge of the zone or a chunk loads",
 	"gamerule.ocwo.moisture_evaporation": "Moisture evaporation",
-	"gamerule.ocwo.moisture_evaporation.description": "Percent of each moisture transfer (water soaked up by a block, moisture passed to a neighbour) that evaporates into the clouds of the zone, in a temperate biome: half in cold biomes, up to 3.5 times more in hot, dry ones. 0 = none"
+	"gamerule.ocwo.moisture_evaporation.description": "Percent of each moisture transfer (water soaked up by a block, moisture passed to a neighbour) that evaporates into the clouds of the zone, in a temperate biome: half in cold biomes, up to 3.5 times more in hot, dry ones. 0 = none",
+	"gamerule.ocwo.reservoir_min_blocks": "Smallest abstract reservoir (blocks)",
+	"gamerule.ocwo.reservoir_min_blocks.description": "A body of natural water at rest with at least this many blocks is one tank: the water taken from it comes off its surface, which goes down evenly, without waking the whole body. Smaller bodies flow normally. 0 = no reservoirs"
 }

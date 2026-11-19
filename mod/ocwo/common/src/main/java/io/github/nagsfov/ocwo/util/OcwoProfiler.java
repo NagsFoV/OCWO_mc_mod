@@ -22,7 +22,15 @@ public final class OcwoProfiler {
 	private static long pressureNanos;
 	private static long moistureNanos;
 
+	/** Time of the last tick sample (diagnostics). */
+	private static long lastNanos;
+
 	private OcwoProfiler() {
+	}
+
+	/** Water code time of the last profiled tick, in milliseconds (diagnostics). */
+	public static double lastMillis() {
+		return lastNanos / 1e6;
 	}
 
 	public static void start(ServerLevel level) {
@@ -54,6 +62,7 @@ public final class OcwoProfiler {
 	public static void endTick(ServerLevel level, long tickNanos) {
 		if (!isProfiling(level)) return;
 		long total = tickNanos + pendingNanos;
+		lastNanos = total;
 		pendingNanos = 0;
 		ticks++;
 		sumNanos += total;

@@ -27,8 +27,9 @@ import net.minecraft.world.level.material.FluidState;
  * <b>Reservoir</b>: when the flow (awake water) takes water from natural water (never changed since the world
  * generation) or gives it some, that water keeps its level and the difference goes to the reserve of the zone
  * ({@link WaterReserves}). The reserve starts at 0 and only holds water that was somewhere else before (generation
- * moisture of mined blocks, water poured into natural water): when it cannot pay, the natural water really goes down
- * (and wakes up).
+ * moisture of mined blocks, water poured into natural water). When it cannot pay, a large body of natural water at
+ * rest pays out of its own surface ({@link WaterReservoirs}); otherwise the natural water really goes down (and wakes
+ * up).
  * <p>
  * Awake positions are saved with the chunk ({@link WakeLayer}); a chunk without them has all its fluid at rest. A
  * chunk of an existing world (players have been there) seen for the first time by this version keeps its moving
@@ -183,7 +184,9 @@ public final class WaterRest {
 		int diff = (to.isEmpty() ? 0 : to.getAmount()) - from.getAmount();
 		if (diff == 0) return true;
 		// the block would gain (diff > 0): that water goes into the reserve; it would lose: the reserve pays
-		return WaterReserves.get(level).change(level, pos, diff);
+		if (WaterReserves.get(level).change(level, pos, diff)) return true;
+		// or a large body of natural water at rest pays out of its own surface (06, "Réservoirs abstraits")
+		return diff < 0 && WaterReservoirs.pay(level, pos, from.getType(), -diff);
 	}
 
 	// ------------------------------------------------------------------ going back to rest

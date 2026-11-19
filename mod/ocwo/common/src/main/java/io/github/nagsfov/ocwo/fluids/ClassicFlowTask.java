@@ -126,8 +126,15 @@ public final class ClassicFlowTask extends AbstractFluidTask {
 
 	private void flow(BlockPos from, BlockState fromState, BlockState toState, BlockPos to, Direction dir, int amount) {
 		FluidState toFs = getFluidState(to);
+		int before = this.level;
 		this.level -= amount;
-		setFluid(from, fromState, getFluidState(from), this.level, dir == Direction.DOWN);
+		// OCWO: natural water kept at its level by its reserve or reservoir still shows its old level: what is paid is
+		// the change this task sees (before -> level), not the difference with the world (that paid twice)
+		FluidState fromFs = getFluidState(from);
+		if (isThis(fromFs) && fromFs.getAmount() != before) {
+			fromFs = FluidUtils.getFluidState(fluid, before, fromFs.hasProperty(FlowingFluid.FALLING) && fromFs.getValue(FlowingFluid.FALLING));
+		}
+		setFluid(from, fromState, fromFs, this.level, dir == Direction.DOWN);
 
 		if (isThis(toFs)) {
 			int toLevel = toFs.getAmount() + amount;

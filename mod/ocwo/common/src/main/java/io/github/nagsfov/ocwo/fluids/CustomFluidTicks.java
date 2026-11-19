@@ -270,7 +270,13 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		long pressureStart = profileStart != 0L ? System.nanoTime() : 0L;
 		if (pressureEnabled()) {
 			samplePressure();
-			bodies.tick(world.getGameRules().get(OcwoFluidGameRules.PRESSURE_FLOW_MAX));
+			// pressure transfers count as flow: natural water keeps its level while the reserve or its reservoir pays
+			WaterRest.simulating(true);
+			try {
+				bodies.tick(world.getGameRules().get(OcwoFluidGameRules.PRESSURE_FLOW_MAX));
+			} finally {
+				WaterRest.simulating(false);
+			}
 			// changes made after this point (moisture, equalization) are the next tick's pressure work
 			lastDeferred = bodies.deferred();
 		} else {

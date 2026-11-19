@@ -17,7 +17,40 @@
 
 **Réservoirs de zone** (`WaterReserves`, option choisie par Valentin) : quand l'écoulement prend de l'eau à de l'eau naturelle (au repos ou non) ou lui en verse, l'eau naturelle garde son niveau et la réserve de sa zone (4×4 chunks, sauvegardée) paie ou reçoit la différence ; vide, l'eau naturelle baisse vraiment. Affichée dans F3 et dans `/ocwo water info`.
 
-**Depuis le 19/11/2026** (stabilisation, voir 03, « Registre d'eau par zone ») : la réserve démarre à 0 et non plus au volume d'eau de la zone, qui comptait l'eau deux fois. Elle ne contient que de l'eau qui était ailleurs avant (humidité de génération des blocs minés, eau versée dans l'eau naturelle). Une tranchée creusée depuis une rivière fait donc vraiment baisser la rivière, sauf si la réserve a de quoi payer. Les grandes masses d'eau au repos deviendront des réservoirs abstraits (étape 4 de la stabilisation).
+**Depuis le 19/11/2026** (stabilisation, voir 03, « Registre d'eau par zone ») : la réserve démarre à 0 et non plus au volume d'eau de la zone, qui comptait l'eau deux fois. Elle ne contient que de l'eau qui était ailleurs avant (humidité de génération des blocs minés, eau versée dans l'eau naturelle). Quand la réserve ne peut pas payer, c'est la masse d'eau elle-même qui paie (réservoirs abstraits, ci-dessous).
+
+## Réservoirs abstraits (19/11/2026, stabilisation, étape 4)
+
+**Principe** : une grande masse d'eau naturelle au repos est un seul réservoir. Quand l'écoulement ou la pression prend de l'eau à un de ses blocs et que la réserve de la zone ne peut pas payer, ce bloc garde son niveau et la masse paie avec sa propre surface : ses blocs de surface au repos les plus hauts baissent d'un niveau, les plus proches d'abord. La surface baisse donc régulièrement, d'un niveau à la fois. Ces blocs sont changés sans bruit : ils restent naturels et au repos, rien ne se réveille. Prendre de l'eau à un lac ne réveille plus tout le lac, et l'eau sort vraiment du lac (conservation exacte, sans réserve inventée).
+
+**Seuil** : `ocwo:reservoir_min_blocks` (8 par défaut, soit 2×2×2 ; 0 = pas de réservoirs). Une masse plus petite est de l'eau ordinaire : le bloc baisse vraiment, se réveille et l'eau coule. Une masse qu'un paiement fait passer sous le seuil (un de ses blocs se vide) redevient de l'eau ordinaire.
+
+**Recherche** (`WaterReservoirs`, déterministe, ordre fixe, sans hasard) :
+1. la masse a-t-elle au moins le seuil de blocs (comptés depuis le bloc qui perd l'eau) ;
+2. le bloc de surface le plus proche, en montant d'abord (512 blocs au plus) ;
+3. la surface de proche en proche (la surface de la colonne voisine, un bloc plus haut, au même niveau ou un bloc plus bas), jusqu'à 4 096 blocs de surface, soit 64×64 pour un lac plat. Au-delà, la baisse reste locale à cette zone.
+
+La recherche est gardée pendant le tick : les autres blocs du même lac qui perdent de l'eau dans le même tick la réutilisent (un bloc dont la colonne d'eau naturelle monte jusqu'à la surface trouvée).
+
+**Pression** : les transferts de pression passent maintenant aussi par la réserve et les réservoirs, comme l'écoulement. Avant, la pression prenait l'eau naturelle réveillée sans passer par la réserve.
+
+**Mesures** (test de performance `reservoirTrench*`, un lac naturel de 48×48×4 = 9 216 blocs, un bassin vide de 16×16×2, mur ouvert sur 3 blocs, 1 200 ticks ; les chiffres varient d'un lancement à l'autre selon la place du test) :
+
+| Variante | Temps de notre code (moyenne / pire tick) | Eau réveillée à la fin | Surface du lac |
+|---|---|---|---|
+| Sans réservoirs | 0,6 à 2,3 ms / 11 à 39 ms | 2 800 à 8 200 blocs (tout le lac bouge) | baisse partout de 1 à 2 niveaux, en s'écoulant |
+| Réservoirs dès 8 blocs | 1,0 à 1,7 ms / 34 à 57 ms | 0 à 172 blocs (le bassin) | 31 près de l'ouverture, 32 au loin : un niveau à la fois, régulier |
+| Réservoirs dès 64 blocs | 0,9 à 1,2 ms / 7 à 160 ms | 178 à 180 blocs (le bassin) | pareil |
+
+Les pires ticks varient beaucoup d'un lancement à l'autre (le PC faisait tourner le jeu en même temps). Les ticks lents restants (une dizaine de ticks après l'ouverture) ne viennent pas des réservoirs : une seule recherche et 3 paiements pendant ces ticks.
+
+Première version (recherche en 3D limitée à 1 024 blocs) : le lac se creusait en cuvette près de l'ouverture (7 niveaux plus bas qu'au loin). D'où la recherche par la surface. Deuxième version : jusqu'à 300 ms certains ticks, quand une centaine de blocs du lac perdaient de l'eau dans le même tick et refaisaient chacun la recherche. D'où la réutilisation de la recherche dans le tick.
+
+**Fuite trouvée et corrigée dans l'écoulement** : quand une tâche d'écoulement faisait plusieurs mouvements depuis le même bloc d'eau naturelle, elle écrivait un niveau absolu calculé sur sa propre vue, alors que le monde montrait encore l'ancien niveau (la réserve ou le réservoir avait payé) : le deuxième mouvement était payé deux fois (eau perdue), et l'égalisation pouvait à l'inverse créer de l'eau. L'écoulement et l'égalisation paient maintenant exactement le changement qu'ils ont décidé. Le défaut existait déjà avec l'ancienne réserve, mais elle était si grosse que personne ne le voyait.
+
+**Le seuil de 8 tient** : les grands lacs se comportent pareil avec 8 ou 64 (seul compte le fait d'être au-dessus du seuil), et une masse sous le seuil coule normalement pour un coût négligeable (7 blocs au plus). La vraie limite est la surface regardée (4 096 blocs) : pour un océan, la baisse reste locale à 64×64 blocs autour de la sortie.
+
+**Tests** : `CheckReservoirGameTests` (un lac de 12×12×3 paie un bassin, sa surface baisse régulièrement et reste au repos ; un étang de 4 blocs coule pour de vrai ; un étang de 8 blocs paie par sa surface sans être touché par l'écoulement ; conservation exacte à chaque tick), seul dans son lot.
 
 **Mesures** (monde régénéré à la graine de « New World test », 21×21 chunks autour du joueur, temps moyen par tick du serveur entier / 1 % des pires ticks) :
 
