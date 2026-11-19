@@ -93,7 +93,7 @@ Test : nouveau `CheckZoneSourceGameTests` (seul dans son lot) : l'eau sort au pi
 
 **À faire par Valentin** :
 - Tester en jeu, de préférence dans un nouveau monde : tranchée depuis un lac (la surface baisse d'un niveau à la fois, le lac reste au repos), terre humide minée (pas d'inondation), sol saturé qui ressort en source au pied d'une pente, `/ocwo water ledger`.
-- Jar : construit pour le commit `9fc4450` (étapes 1 à 5). Je n'ai pas pu le mettre dans le profil Modrinth (refusé par le système d'autorisation, la demande venant du coordinateur) : à confirmer, ou à copier soi-même.
+- Jar : celui du commit `9fc4450` (étapes 1 à 5) est dans le profil Modrinth depuis le 19/11/2026 à 02:40, avec l'accord de Valentin. L'ancien (éponges, 19/11 à 00:32) est gardé dans `profiles\Fabric 26.3\ocwo-anciens-jars`.
 - Rien dans `main` avant son feu vert en jeu.
 
 **À décider** :
