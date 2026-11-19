@@ -126,6 +126,11 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
 	}
 
 	@Override
+	public void sendReservoirView(net.minecraft.server.level.ServerPlayer player, io.github.nagsfov.ocwo.debug.ReservoirViewPayload payload) {
+		throw todo();
+	}
+
+	@Override
 	public boolean isFlammable(BlockState state) {
 		throw todo();
 	}

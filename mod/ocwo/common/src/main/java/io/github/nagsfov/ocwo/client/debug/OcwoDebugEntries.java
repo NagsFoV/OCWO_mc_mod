@@ -18,15 +18,16 @@ import java.util.List;
 import java.util.function.Function;
 
 /**
- * The three OCWO entries of the F3 debug screen (listed in F3+F6 as ocwo_water_at_head, ocwo_looking_at and
- * ocwo_simulation). Their lines are computed by the server ({@link io.github.nagsfov.ocwo.debug.OcwoDebug}) and
- * translated here.
+ * The four OCWO entries of the F3 debug screen (listed in F3+F6 as ocwo_water_at_head, ocwo_looking_at,
+ * ocwo_simulation and ocwo_reservoirs). Their lines are computed by the server
+ * ({@link io.github.nagsfov.ocwo.debug.OcwoDebug}) and translated here.
  */
 public final class OcwoDebugEntries {
 
 	public static final Identifier HEAD = Identifier.fromNamespaceAndPath(Ocwo.MOD_ID, "ocwo_water_at_head");
 	public static final Identifier BLOCK = Identifier.fromNamespaceAndPath(Ocwo.MOD_ID, "ocwo_looking_at");
 	public static final Identifier SIM = Identifier.fromNamespaceAndPath(Ocwo.MOD_ID, "ocwo_simulation");
+	public static final Identifier RESERVOIRS = Identifier.fromNamespaceAndPath(Ocwo.MOD_ID, "ocwo_reservoirs");
 
 	/** Last lines received from the server. */
 	private static volatile DebugPayload latest = DebugPayload.EMPTY;
@@ -41,6 +42,7 @@ public final class OcwoDebugEntries {
 		DebugScreenEntriesInvoker.ocwo$register(HEAD, new Entry(HEAD, DebugPayload::head));
 		DebugScreenEntriesInvoker.ocwo$register(BLOCK, new Entry(BLOCK, DebugPayload::block));
 		DebugScreenEntriesInvoker.ocwo$register(SIM, new Entry(SIM, DebugPayload::sim));
+		DebugScreenEntriesInvoker.ocwo$register(RESERVOIRS, new Entry(RESERVOIRS, DebugPayload::reservoirs));
 	}
 
 	public static void receive(DebugPayload payload) {
@@ -59,6 +61,7 @@ public final class OcwoDebugEntries {
 		if (enabled.contains(HEAD)) mask |= DebugSubscribePayload.HEAD;
 		if (enabled.contains(BLOCK)) mask |= DebugSubscribePayload.BLOCK;
 		if (enabled.contains(SIM)) mask |= DebugSubscribePayload.SIM;
+		if (enabled.contains(RESERVOIRS)) mask |= DebugSubscribePayload.RESERVOIRS;
 		return mask;
 	}
 

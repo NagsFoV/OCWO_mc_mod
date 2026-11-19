@@ -557,6 +557,59 @@ public final class MoistureSimulation {
 	 */
 	private BlockPos searchOutlet(BlockPos start) {
 		sourceSearches++;
+		return scanCluster(start).outlet();
+	}
+
+	/** A saturated cluster: its blocks looked at (at most {@link #SOURCE_SEARCH}) and its best outlet (null: none). */
+	public record Cluster(int blocks, boolean more, BlockPos outlet) {
+	}
+
+	/**
+	 * The saturated cluster of a block of saturated wet ground and its outlet, as the next seepage would find it (read
+	 * only: nothing recorded, for the debug screen). Null when pos is not saturated wet ground.
+	 */
+	public Cluster inspectCluster(BlockPos pos) {
+		if (!level.isLoaded(pos)) return null;
+		BlockState s = level.getBlockState(pos);
+		MoistureProps p = MoistureData.get(s);
+		if (!ground(p, s) || units(pos) < p.capacity()) return null;
+		return scanCluster(pos);
+	}
+
+	/**
+	 * Saturated wet ground that is simulated (its section was disturbed) within {@code radius} blocks of center
+	 * (height: half of it), at most {@code max} blocks: the moisture reservoirs that make the zone sources (display).
+	 * Ground at its generation moisture is left out (saturated everywhere under the sea level).
+	 */
+	public long[] saturatedAround(BlockPos center, int radius, int max) {
+		it.unimi.dsi.fastutil.longs.LongArrayList out = new it.unimi.dsi.fastutil.longs.LongArrayList();
+		int cx0 = (center.getX() - radius) >> 4, cx1 = (center.getX() + radius) >> 4;
+		int cz0 = (center.getZ() - radius) >> 4, cz1 = (center.getZ() + radius) >> 4;
+		int y0 = center.getY() - radius / 2, y1 = center.getY() + radius / 2;
+		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+		for (int cx = cx0; cx <= cx1 && out.size() < max; cx++)
+			for (int cz = cz0; cz <= cz1 && out.size() < max; cz++) {
+				LevelChunk chunk = level.getChunkSource().getChunkNow(cx, cz);
+				if (chunk == null) continue;
+				MoistureLayer layer = Services.PLATFORM.getMoistureLayer(chunk);
+				if (layer == null || layer.isEmpty()) continue;
+				for (int index : layer.sectionIndexes()) {
+					int sy = chunk.getSectionYFromSectionIndex(index) << 4;
+					if (sy + 15 < y0 || sy > y1) continue;
+					for (int k = 0; k < 4096 && out.size() < max; k++) {
+						m.set((cx << 4) | (k & 15), sy | (k >> 8), (cz << 4) | ((k >> 4) & 15));
+						if (m.getY() < y0 || m.getY() > y1 || Math.abs(m.getX() - center.getX()) > radius
+								|| Math.abs(m.getZ() - center.getZ()) > radius) continue;
+						BlockState s = chunk.getBlockState(m);
+						MoistureProps p = MoistureData.get(s);
+						if (ground(p, s) && layer.get(chunk, m) >= p.capacity()) out.add(m.asLong());
+					}
+				}
+			}
+		return out.toLongArray();
+	}
+
+	private Cluster scanCluster(BlockPos start) {
 		it.unimi.dsi.fastutil.longs.LongOpenHashSet seen = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
 		java.util.ArrayDeque<BlockPos> queue = new java.util.ArrayDeque<>();
 		seen.add(start.asLong());
@@ -584,7 +637,7 @@ public final class MoistureSimulation {
 				queue.add(n);
 			}
 		}
-		return best;
+		return new Cluster(seen.size(), seen.size() >= SOURCE_SEARCH, best);
 	}
 
 	/** This cell can take one more water level (air, replaceable, or water that is not full and not falling). */

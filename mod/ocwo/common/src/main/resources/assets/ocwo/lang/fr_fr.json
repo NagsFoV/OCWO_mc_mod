@@ -1,5 +1,5 @@
 {
-	"ocwo.debug.command": "Le débogage OCWO est maintenant dans l'écran F3 (F3+F6 pour choisir les lignes OCWO : ocwo_water_at_head, ocwo_looking_at, ocwo_simulation).",
+	"ocwo.debug.command": "Le débogage OCWO est maintenant dans l'écran F3 (F3+F6 pour choisir les lignes OCWO : ocwo_water_at_head, ocwo_looking_at, ocwo_simulation, ocwo_reservoirs). /ocwo debug reservoirs montre les réservoirs dans le monde.",
 	"ocwo.debug.flag.falling": "chute",
 	"ocwo.debug.flag.layer": "couche fluide",
 	"ocwo.debug.head.none": "OCWO tête : hors de l'eau",
@@ -60,5 +60,24 @@
 	"tooltip.ocwo.sponge_water": "Remplissage : %s / 64 niveaux",
 	"gamerule.ocwo.sponge_drying": "Séchage des éponges",
 	"gamerule.ocwo.sponge_drying.description": "À l'air libre, dans les biomes chauds où il ne pleut jamais (désert, badlands, savane), les éponges sèchent lentement : une éponge pleine en environ un jour. L'eau part aux nuages",
-	"ocwo.debug.block.sponge_fill": "Éponge : remplissage %s / %s niveaux"
+	"ocwo.debug.block.sponge_fill": "Éponge : remplissage %s / %s niveaux",
+	"ocwo.debug.res.operators": "OCWO réservoirs : réservé aux opérateurs",
+	"ocwo.debug.res.body.reservoir": "OCWO réservoir (lac ou mer) : %s blocs de surface, %s peuvent baisser, surface de y %s à %s",
+	"ocwo.debug.res.body.reservoir_big": "OCWO réservoir (lac ou mer) : %s blocs de surface ou plus (seule la partie proche de la sortie paie), %s peuvent baisser, surface de y %s à %s",
+	"ocwo.debug.res.body.small": "OCWO eau naturelle de moins de %s blocs : eau ordinaire, elle coule",
+	"ocwo.debug.res.body.no_surface": "OCWO eau naturelle sans surface trouvée : eau ordinaire, elle coule",
+	"ocwo.debug.res.body.changed": "OCWO eau modifiée par un joueur ou l'écoulement : pas un réservoir",
+	"ocwo.debug.res.body.none": "OCWO réservoirs : aucune eau regardée (jusqu'à %s blocs)",
+	"ocwo.debug.res.zone": "OCWO zone %s, %s : réserve %s niveaux, nuages %s niveaux, %s sources enregistrées",
+	"ocwo.debug.res.source": "OCWO source de zone la plus proche : %s (%s blocs)",
+	"ocwo.debug.res.source.none": "OCWO aucune source enregistrée dans cette zone",
+	"ocwo.debug.res.cluster": "OCWO amas saturé regardé : %s%s blocs, débouché : %s",
+	"ocwo.debug.res.cluster.none": "OCWO bloc regardé : pas du sol humide saturé",
+	"ocwo.debug.res.no_outlet": "aucun",
+	"ocwo.debug.res.view.on": "OCWO affichage dans le monde : activé (/ocwo debug reservoirs pour l'arrêter)",
+	"ocwo.debug.res.view.off": "OCWO affichage dans le monde : désactivé (/ocwo debug reservoirs)",
+	"ocwo.debug.view.on": "Affichage des réservoirs activé : bleu au-dessus des lacs et des mers qui paient avec leur surface, orange au-dessus du sol saturé, vert aux sources de zone.",
+	"ocwo.debug.view.off": "Affichage des réservoirs désactivé.",
+	"ocwo.debug.view.operators": "L'affichage des réservoirs est réservé aux opérateurs.",
+	"ocwo.debug.view.players": "Seul un joueur peut afficher les réservoirs."
 }

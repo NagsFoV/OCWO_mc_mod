@@ -42,16 +42,28 @@ import static io.github.nagsfov.ocwo.debug.DebugPayload.key;
 import static io.github.nagsfov.ocwo.debug.DebugPayload.line;
 
 /**
- * OCWO lines of the F3 debug screen (water at head, block looked at, simulation). The client says which OCWO
- * entries it shows ({@link DebugSubscribePayload}, only while F3 shows at least one of them); the server computes
- * them every {@link #PERIOD} ticks for those players only (pressure and moisture only exist on the server).
- * Nothing is sent when the reducedDebugInfo game rule is on; the simulation group is for operators (and for the
- * owner of a single player world).
+ * OCWO lines of the F3 debug screen (water at head, block looked at, simulation, reservoirs). The client says which
+ * OCWO entries it shows ({@link DebugSubscribePayload}, only while F3 shows at least one of them); the server
+ * computes them every {@link #PERIOD} ticks for those players only (pressure and moisture only exist on the server).
+ * Nothing is sent when the reducedDebugInfo game rule is on; the simulation and reservoirs groups are for operators
+ * (and for the owner of a single player world).
+ * <p>
+ * {@code /ocwo debug reservoirs} (same players) turns on or off a display of the reservoirs in the world, around the
+ * player: sent every {@link #VIEW_PERIOD} ticks to that player only, while it is on ({@link ReservoirViewPayload}).
  */
 public final class OcwoDebug {
 
 	private static final Map<UUID, Integer> SUBSCRIBED = new ConcurrentHashMap<>();
+	/** Players who turned on the display of the reservoirs in the world. */
+	private static final java.util.Set<UUID> VIEWERS = ConcurrentHashMap.newKeySet();
 	private static final int PERIOD = 10;
+	private static final int VIEW_PERIOD = 20;
+	/** Display: blocks around the player (reservoirs and sources), saturated ground nearer. */
+	private static final int VIEW_RADIUS = 32, VIEW_GROUND_RADIUS = 24;
+	/** Display: most positions sent (surface blocks, saturated ground). */
+	private static final int VIEW_MAX_SURFACE = 2048, VIEW_MAX_GROUND = 1024;
+	/** Reservoirs group: how far the water looked at can be. */
+	private static final double RESERVOIR_REACH = 32.0;
 	private static final double REACH = 6.0;
 	private static volatile boolean active;
 
@@ -73,7 +85,9 @@ public final class OcwoDebug {
 						.executes(ctx -> {
 							ctx.getSource().sendSuccess(() -> Component.translatable("ocwo.debug.command"), false);
 							return 1;
-						}))
+						})
+						.then(Commands.literal("reservoirs")
+								.executes(ctx -> toggleView(ctx.getSource()))))
 				.then(Commands.literal("water")
 						.requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
 						.then(Commands.literal("rest").then(Commands.argument("radius", com.mojang.brigadier.arguments.IntegerArgumentType.integer(0, 32))
@@ -142,7 +156,38 @@ public final class OcwoDebug {
 
 	public static void onPlayerLeft(UUID id) {
 		SUBSCRIBED.remove(id);
+		VIEWERS.remove(id);
 		refreshActive();
+	}
+
+	/** {@code /ocwo debug reservoirs}: turns the display of the reservoirs in the world on or off for this player. */
+	private static int toggleView(CommandSourceStack source) {
+		ServerPlayer player = source.getPlayer();
+		if (player == null) {
+			source.sendFailure(Component.translatable("ocwo.debug.view.players"));
+			return 0;
+		}
+		if (!mayUseSimulation(player)) {
+			source.sendFailure(Component.translatable("ocwo.debug.view.operators"));
+			return 0;
+		}
+		boolean on = setView(player, !VIEWERS.contains(player.getUUID()));
+		source.sendSuccess(() -> Component.translatable(on ? "ocwo.debug.view.on" : "ocwo.debug.view.off"), false);
+		return on ? 1 : 0;
+	}
+
+	/** Turns the display on or off (off: one empty packet clears it on the client). Returns the new state. */
+	public static boolean setView(ServerPlayer player, boolean on) {
+		if (on) {
+			VIEWERS.add(player.getUUID());
+		} else if (VIEWERS.remove(player.getUUID())) {
+			Services.PLATFORM.sendReservoirView(player, ReservoirViewPayload.EMPTY);
+		}
+		return on;
+	}
+
+	public static boolean isViewing(ServerPlayer player) {
+		return VIEWERS.contains(player.getUUID());
 	}
 
 	private static void refreshActive() {
@@ -164,6 +209,16 @@ public final class OcwoDebug {
 
 	/** Called every tick for each level, at the end of its fluid tick. */
 	public static void tick(ServerLevel level) {
+		if (!VIEWERS.isEmpty() && level.getGameTime() % VIEW_PERIOD == 0) {
+			for (ServerPlayer player : level.players()) {
+				if (!VIEWERS.contains(player.getUUID())) continue;
+				if (!mayUseSimulation(player)) {
+					setView(player, false); // no longer an operator
+					continue;
+				}
+				Services.PLATFORM.sendReservoirView(player, view(level, player));
+			}
+		}
 		if (SUBSCRIBED.isEmpty() || level.getGameTime() % PERIOD != 0) return;
 		if (level.getGameRules().get(GameRules.REDUCED_DEBUG_INFO)) return;
 		for (ServerPlayer player : level.players()) {
@@ -175,14 +230,18 @@ public final class OcwoDebug {
 
 	/** The lines for these groups (public for the tests). */
 	public static DebugPayload build(ServerLevel level, ServerPlayer player, int mask) {
-		List<String> head = new ArrayList<>(), block = new ArrayList<>(), sim = new ArrayList<>();
+		List<String> head = new ArrayList<>(), block = new ArrayList<>(), sim = new ArrayList<>(), res = new ArrayList<>();
 		if ((mask & DebugSubscribePayload.HEAD) != 0) headWater(level, player, head);
 		if ((mask & DebugSubscribePayload.BLOCK) != 0) lookedAt(level, player, block);
 		if ((mask & DebugSubscribePayload.SIM) != 0) {
 			if (mayUseSimulation(player)) simulation(level, sim);
 			else sim.add(line("ocwo.debug.sim.operators"));
 		}
-		return new DebugPayload(head, block, sim);
+		if ((mask & DebugSubscribePayload.RESERVOIRS) != 0) {
+			if (mayUseSimulation(player)) reservoirs(level, player, res);
+			else res.add(line("ocwo.debug.res.operators"));
+		}
+		return new DebugPayload(head, block, sim, res);
 	}
 
 	// ------------------------------------------------------------------ content
@@ -298,5 +357,124 @@ public final class OcwoDebug {
 		out.add(line("ocwo.debug.sim.quotas", b.distance(), b.bodyCount(), b.columnCount()));
 		out.add(line("ocwo.debug.sim.limits", b.lastBodiesWorked, b.lastTransfers, ticks.lastDeferred(),
 				rules.get(OcwoFluidGameRules.PRESSURE_FLOW_MAX)));
+	}
+
+	// ------------------------------------------------------------------ reservoirs
+
+	/**
+	 * The reservoirs group: the body of water looked at (or around the player) as a reservoir (06, "Réservoirs
+	 * abstraits"), the zone (reserve, clouds, sources) and the saturated ground looked at with its outlet (03, "Sources
+	 * de zone").
+	 */
+	/** The lines of the reservoirs group, whoever asks (public for the tests; the group itself is for operators). */
+	public static List<String> reservoirLines(ServerLevel level, ServerPlayer player) {
+		List<String> out = new ArrayList<>();
+		reservoirs(level, player, out);
+		return out;
+	}
+
+	private static void reservoirs(ServerLevel level, ServerPlayer player, List<String> out) {
+		Vec3 eye = player.getEyePosition();
+		Vec3 end = eye.add(player.getViewVector(1.0F).scale(RESERVOIR_REACH));
+		BlockHitResult water = level.clip(new ClipContext(eye, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.ANY, player));
+		BlockHitResult ground = level.clip(new ClipContext(eye, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
+		BlockPos wp = null;
+		if (water.getType() == HitResult.Type.BLOCK && !level.getFluidState(water.getBlockPos()).isEmpty()) wp = water.getBlockPos();
+		else if (!level.getFluidState(BlockPos.containing(eye)).isEmpty()) wp = BlockPos.containing(eye);
+		else if (!level.getFluidState(player.blockPosition()).isEmpty()) wp = player.blockPosition();
+		if (wp == null) {
+			out.add(line("ocwo.debug.res.body.none", (int) RESERVOIR_REACH));
+		} else {
+			FluidState fs = level.getFluidState(wp);
+			var in = io.github.nagsfov.ocwo.fluids.WaterReservoirs.inspect(level, wp, fs.getType(), 0);
+			switch (in.kind()) {
+				case RESERVOIR -> out.add(line(in.surface() >= io.github.nagsfov.ocwo.fluids.WaterReservoirs.MAX_SURFACE
+								? "ocwo.debug.res.body.reservoir_big" : "ocwo.debug.res.body.reservoir",
+						in.surface(), in.canGoDown(), in.minY(), in.maxY()));
+				case SMALL -> out.add(line("ocwo.debug.res.body.small", io.github.nagsfov.ocwo.fluids.WaterReservoirs.minBlocks(level)));
+				case NO_SURFACE -> out.add(line("ocwo.debug.res.body.no_surface"));
+				case NONE -> out.add(line("ocwo.debug.res.body.changed"));
+			}
+		}
+		// the zone of the player
+		BlockPos at = player.blockPosition();
+		var ledger = io.github.nagsfov.ocwo.fluids.WaterReserves.get(level);
+		long zone = io.github.nagsfov.ocwo.fluids.WaterReserves.zone(at);
+		var sources = ledger.sourcesOf(zone);
+		out.add(line("ocwo.debug.res.zone", io.github.nagsfov.ocwo.fluids.WaterReserves.zoneX(zone), io.github.nagsfov.ocwo.fluids.WaterReserves.zoneZ(zone),
+				levels(ledger.reserveUnits(level, at)), levels(ledger.clouds(at)), sources.size()));
+		BlockPos nearest = null;
+		double best = Double.MAX_VALUE;
+		for (int i = 0; i < sources.size(); i++) {
+			BlockPos s = BlockPos.of(sources.getLong(i));
+			double d = s.distSqr(at);
+			if (d < best) {
+				best = d;
+				nearest = s;
+			}
+		}
+		if (nearest == null) out.add(line("ocwo.debug.res.source.none"));
+		else out.add(line("ocwo.debug.res.source", nearest.toShortString(), String.format(Locale.ROOT, "%.0f", Math.sqrt(best))));
+		// the saturated ground looked at, its cluster and outlet
+		if (ground.getType() == HitResult.Type.BLOCK) {
+			var cluster = CustomFluidTicks.get(level).moisture().inspectCluster(ground.getBlockPos());
+			if (cluster == null) out.add(line("ocwo.debug.res.cluster.none"));
+			else out.add(line("ocwo.debug.res.cluster", cluster.blocks(), cluster.more() ? "+" : "",
+					cluster.outlet() == null ? key("ocwo.debug.res.no_outlet") : cluster.outlet().toShortString()));
+		}
+		out.add(line(isViewing(player) ? "ocwo.debug.res.view.on" : "ocwo.debug.res.view.off"));
+	}
+
+	/**
+	 * The display of the reservoirs around a player (public for the tests): surface blocks of the abstract reservoirs
+	 * whose surface is within {@link #VIEW_RADIUS} blocks (looked for every 8 blocks, and under the player), zone
+	 * sources within that distance, saturated simulated ground within {@link #VIEW_GROUND_RADIUS} blocks.
+	 */
+	public static ReservoirViewPayload view(ServerLevel level, ServerPlayer player) {
+		BlockPos at = player.blockPosition();
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet surface = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+		it.unimi.dsi.fastutil.longs.LongArrayList cells = new it.unimi.dsi.fastutil.longs.LongArrayList();
+		List<BlockPos> starts = new ArrayList<>();
+		if (!level.getFluidState(at).isEmpty()) starts.add(at);
+		for (int dx = -VIEW_RADIUS; dx <= VIEW_RADIUS; dx += 8)
+			for (int dz = -VIEW_RADIUS; dz <= VIEW_RADIUS; dz += 8) {
+				// the first water going down the column, from above the player (caves and covered water included)
+				BlockPos.MutableBlockPos m = at.mutable().move(dx, VIEW_RADIUS / 2, dz);
+				if (!level.isLoaded(m)) continue;
+				for (int i = 0; i <= VIEW_RADIUS * 3 / 2; i++, m.move(net.minecraft.core.Direction.DOWN)) {
+					if (!level.getFluidState(m).isEmpty()) {
+						starts.add(m.immutable());
+						break;
+					}
+				}
+			}
+		for (BlockPos s : starts) {
+			if (cells.size() >= VIEW_MAX_SURFACE) break;
+			if (surface.contains(s.asLong())) continue;
+			FluidState fs = level.getFluidState(s);
+			var in = io.github.nagsfov.ocwo.fluids.WaterReservoirs.inspect(level, s, fs.getType(), VIEW_MAX_SURFACE);
+			if (in.kind() != io.github.nagsfov.ocwo.fluids.WaterReservoirs.Kind.RESERVOIR) continue;
+			for (long c : in.cells()) {
+				if (!surface.add(c)) continue;
+				BlockPos p = BlockPos.of(c);
+				if (Math.abs(p.getX() - at.getX()) > VIEW_RADIUS || Math.abs(p.getZ() - at.getZ()) > VIEW_RADIUS) continue;
+				if (cells.size() < VIEW_MAX_SURFACE) cells.add(c);
+			}
+		}
+		// zone sources nearby (the zones of the corners of the area)
+		var ledger = io.github.nagsfov.ocwo.fluids.WaterReserves.get(level);
+		it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet zones = new it.unimi.dsi.fastutil.longs.LongLinkedOpenHashSet();
+		for (int dx : new int[]{-VIEW_RADIUS, VIEW_RADIUS})
+			for (int dz : new int[]{-VIEW_RADIUS, VIEW_RADIUS}) zones.add(io.github.nagsfov.ocwo.fluids.WaterReserves.zone(at.offset(dx, 0, dz)));
+		it.unimi.dsi.fastutil.longs.LongArrayList sources = new it.unimi.dsi.fastutil.longs.LongArrayList();
+		for (long z : zones) {
+			var list = ledger.sourcesOf(z);
+			for (int i = 0; i < list.size(); i++) {
+				BlockPos p = BlockPos.of(list.getLong(i));
+				if (Math.abs(p.getX() - at.getX()) <= VIEW_RADIUS && Math.abs(p.getZ() - at.getZ()) <= VIEW_RADIUS) sources.add(list.getLong(i));
+			}
+		}
+		long[] ground = CustomFluidTicks.get(level).moisture().saturatedAround(at, VIEW_GROUND_RADIUS, VIEW_MAX_GROUND);
+		return new ReservoirViewPayload(cells.toLongArray(), sources.toLongArray(), ground);
 	}
 }

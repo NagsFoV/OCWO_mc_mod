@@ -84,6 +84,9 @@ public interface IPlatformHelper {
 
 	void sendDebug(net.minecraft.server.level.ServerPlayer player, io.github.nagsfov.ocwo.debug.DebugPayload payload);
 
+	/** The reservoirs around a player who turned their display on ({@code /ocwo debug reservoirs}). */
+	void sendReservoirView(net.minecraft.server.level.ServerPlayer player, io.github.nagsfov.ocwo.debug.ReservoirViewPayload payload);
+
 	// ---- Blocks and fluids ----
 
 	/** Whether fire can burn this block (loader flammability registry). */

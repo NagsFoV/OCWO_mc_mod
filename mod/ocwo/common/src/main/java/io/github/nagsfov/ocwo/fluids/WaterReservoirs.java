@@ -144,6 +144,85 @@ public final class WaterReservoirs {
 		return true;
 	}
 
+	// ------------------------------------------------------------------ inspection (debug screen and display)
+
+	/** What the water at a position is, as a reservoir. */
+	public enum Kind {
+		/** No natural water there (no water, or water that a player or the flow changed). */
+		NONE,
+		/** Natural water, but fewer blocks than {@link #minBlocks}: ordinary water, it flows for real. */
+		SMALL,
+		/** Natural water with no surface found near it (under a ceiling): it flows for real. */
+		NO_SURFACE,
+		/** A reservoir: it pays out of its surface. */
+		RESERVOIR
+	}
+
+	/**
+	 * A reservoir as {@link #pay} would see it: its kind, its surface blocks (up to {@link #MAX_SURFACE}), how many of
+	 * them can go down (plain water at rest), the lowest and highest surface block, and the surface blocks themselves
+	 * (up to {@code maxCells}, for the display).
+	 */
+	public record Inspection(Kind kind, int surface, int canGoDown, int minY, int maxY, long[] cells) {
+		static final Inspection NONE = new Inspection(Kind.NONE, 0, 0, 0, 0, new long[0]);
+	}
+
+	/** Same search as a payment, read only (no cache, no counters): what the body of natural water at pos is. */
+	public static Inspection inspect(ServerLevel level, BlockPos pos, Fluid fluid, int maxCells) {
+		if (!natural(level, pos, fluid)) return Inspection.NONE;
+		int min = minBlocks(level);
+		if (min <= 0 || !atLeast(level, pos, fluid, min)) return new Inspection(Kind.SMALL, 0, 0, 0, 0, new long[0]);
+		// climb to the surface (3D, fixed order), then walk along it
+		LongOpenHashSet body = new LongOpenHashSet();
+		ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+		BlockPos start = null;
+		body.add(pos.asLong());
+		queue.add(pos);
+		while (!queue.isEmpty() && body.size() < MAX_CLIMB) {
+			BlockPos p = queue.poll();
+			if (isSurface(level, p, fluid)) {
+				start = p;
+				break;
+			}
+			for (Direction d : ORDER) {
+				BlockPos n = p.relative(d);
+				if (body.contains(n.asLong()) || !natural(level, n, fluid)) continue;
+				body.add(n.asLong());
+				queue.add(n);
+			}
+		}
+		if (start == null) return new Inspection(Kind.NO_SURFACE, 0, 0, 0, 0, new long[0]);
+		LongOpenHashSet seen = new LongOpenHashSet();
+		it.unimi.dsi.fastutil.longs.LongArrayList cells = new it.unimi.dsi.fastutil.longs.LongArrayList();
+		queue.clear();
+		seen.add(start.asLong());
+		queue.add(start);
+		int down = 0, minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
+		BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+		while (!queue.isEmpty()) {
+			BlockPos p = queue.poll();
+			if (canGoDown(level, p)) down++;
+			minY = Math.min(minY, p.getY());
+			maxY = Math.max(maxY, p.getY());
+			if (cells.size() < maxCells) cells.add(p.asLong());
+			for (Direction d : SIDES) {
+				if (seen.size() >= MAX_SURFACE) break;
+				BlockPos side = p.relative(d);
+				BlockPos next = null;
+				for (int dy : new int[]{1, 0, -1}) {
+					m.setWithOffset(side, 0, dy, 0);
+					if (isSurface(level, m, fluid)) {
+						next = m.immutable();
+						break;
+					}
+				}
+				if (next == null || !seen.add(next.asLong())) continue;
+				queue.add(next);
+			}
+		}
+		return new Inspection(Kind.RESERVOIR, seen.size(), down, minY, maxY, cells.toLongArray());
+	}
+
 	/** pos is in the body found by this tick's search: itself, or its column of natural water goes up into it. */
 	private static boolean inCachedBody(ServerLevel level, BlockPos pos, Fluid fluid) {
 		if (cacheBody.contains(pos.asLong())) return true;
