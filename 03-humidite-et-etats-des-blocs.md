@@ -200,7 +200,7 @@ Règles de Valentin. Rien n'est créé ni détruit : chaque test vérifie que l'
 
 ### Une éponge est un seau
 
-- Elle a un **niveau de remplissage** de 0 à 64 niveaux (128 pour une éponge étirée). Ce n'est plus une humidité : elle n'échange **rien avec le sol** humide (terre, sable…), seulement avec les blocs d'eau.
+- Elle a un **niveau de remplissage** de 0 à 64 niveaux (128 pour une éponge étirée), **toujours en niveaux entiers**. Ce n'est plus une humidité : elle n'échange **rien avec le sol** humide (terre, sable…), seulement avec les blocs d'eau. Son eau est rangée au même endroit que l'humidité des blocs (pratique pour la sauvegarde, les pistons et le registre), mais le F3, `/ocwo moisture` et l'infobulle affichent un remplissage. Un reste de fraction de niveau (laissé par une ancienne version) part aux nuages.
 - Elle aspire tout de suite, quand on la pose et quand un bloc voisin change : l'eau reliée jusqu'à 6 blocs de distance, 64 cases au plus, jusqu'à être pleine. Elle paraît mouillée dès qu'elle tient 1 niveau.
 - **Deux éponges qui se touchent** (normales ou étirées, pas compressées) se partagent leur eau, en continu, comme des vases communicants : tout le groupe qui se touche, en proportion de la contenance, en niveaux entiers. Les niveaux en trop vont aux éponges les plus proches de celle qui a bougé.
 - **Séchage** : à l'air libre, dans les biomes sans pluie dont la température de base est d'au moins 1,5 (désert, badlands, savane), elle sèche lentement par ticks aléatoires. Une éponge pleine sèche en environ un jour de jeu. L'eau part aux nuages de la zone. Règle `ocwo:sponge_drying` (activée).
@@ -228,7 +228,7 @@ Deux éponges pressées l'une contre l'autre par un piston, sur un seul axe. Cha
 
 ### Éponge étirée : tient sous condition
 
-Un piston collant qui se rétracte avec une éponge devant sa tête, tenue de l'autre côté par un élément collant (slime, miel, tête ou face d'un piston collant), l'étire sur deux blocs.
+Un piston collant qui se rétracte avec une éponge devant sa tête, tenue de l'autre côté par un élément collant (slime, miel, tête ou face d'un piston collant) **ancré**, l'étire sur deux blocs. Ancré : il ne serait pas tiré avec l'éponge. S'il serait tiré avec elle, le piston tire tout le groupe comme en vanilla.
 - C'est **une seule éponge** sur deux blocs, qui compte pour deux éponges partageant la même eau (128 niveaux). Elle absorbe dès qu'une seule de ses deux moitiés touche de l'eau.
 - Elle tient tant qu'un **élément collant touche chaque bout**. Sinon, elle redevient une éponge d'un bloc, dans la moitié touchée par l'élément collant qui reste. S'il n'en reste aucun, elle revient dans la case où elle était avant l'étirement. Le surplus au-delà de 64 niveaux est rejeté autour.
 - Repoussée sur son axe (par la tête du piston ou par un autre bloc), elle redevient une éponge d'un bloc, dans sa moitié la plus éloignée.
@@ -238,12 +238,14 @@ Un piston collant qui se rétracte avec une éponge devant sa tête, tenue de l'
 ### Pistons
 
 Avant qu'un piston qui s'étend ne déplace quoi que ce soit, sa ligne de poussée est lue depuis la tête ; la première règle qui s'applique est faite, puis la ligne est relue.
-1. Une éponge ne pousse **jamais un autre bloc** qu'une éponge. Elle est écrasée, ou compressée si c'est une éponge normale poussée par une autre éponge normale. Exception : le slime et le miel collés à l'éponge bougent avec elle.
+1. Une éponge ne pousse **jamais un autre bloc** qu'une éponge. Une éponge seule est écrasée. Dans une file d'éponges bloquée, ce sont les **deux plus proches du piston** qui sont compressées (piston / É1 / É2 / É3 / mur donne tête / compressée / É3 / mur). Exception : le slime et le miel collés à l'éponge bougent avec elle.
 2. Une éponge poussée contre une éponge compressée ou étirée est écrasée, comme contre un bloc normal.
 3. Une éponge compressée pressée de nouveau sur son axe casse.
 4. Une éponge étirée poussée sur son axe redevient une éponge d'un bloc.
 
 **Écrasement** : l'eau sort seulement par les 4 cases sur les côtés de l'éponge (perpendiculaires à la poussée), puis continue vers les cases libres suivantes (recherche bornée à 256 cases, ordre fixe). Elle ne va jamais dans le bloc devant ni dans la tête du piston. Si l'éponge contient de l'eau et qu'aucune des 4 cases latérales n'est libre (air ou eau pas pleine), le piston ne pousse pas du tout. Une éponge sèche est écrasée quand même.
+
+**Aucun bloc n'est écrasé** : les éponges ne remplacent que des cases d'air, d'eau ou d'éponge. Une éponge compressée qui se sépare dans une case avec une plante la détruit avec ses objets, comme le ferait un piston. Les blocs que les éponges changent pendant un mouvement de piston sont envoyés aux joueurs avant le mouvement lui-même : sinon le client déplaçait les blocs comme en vanilla (une pierre devant une éponge, par exemple) et les gardait là où le serveur n'avait rien changé, et des blocs semblaient remplacés ou doublés.
 
 Exemple de Valentin, en ligne : piston collant› / éponge / slime / étirée / étirée / ‹piston collant. Le piston de gauche pousse, et on obtient : piston sorti / tête / éponge / slime / éponge / ‹piston collant.
 

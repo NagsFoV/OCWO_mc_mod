@@ -38,10 +38,36 @@ public class PistonBaseBlockMixin {
 	void ocwoSpongeRules(Level level, BlockPos pistonPos, Direction direction, boolean extending, CallbackInfoReturnable<Boolean> cir) {
 		if (level.isClientSide()) return;
 		if (extending) {
-			if (!SpongePistons.beforeExtend((ServerLevel) level, pistonPos, direction)) cir.setReturnValue(false);
+			SpongeLogic.beginSync();
+			try {
+				if (!SpongePistons.beforeExtend((ServerLevel) level, pistonPos, direction)) cir.setReturnValue(false);
+			} finally {
+				// the clients get these changes before the piston event: they move the same blocks as the server
+				SpongeLogic.endSync((ServerLevel) level);
+			}
 		} else {
 			SpongeLogic.saveHeadWater((ServerLevel) level, pistonPos, direction);
 		}
+	}
+
+	/**
+	 * OCWO sponges: a retracting sticky piston with a sponge in front of its head, held at its other end by an anchored
+	 * sticky element (not pulled along), stretches it instead of pulling (the head's cell is already empty here).
+	 */
+	@WrapOperation(method = "moveBlocks", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/world/level/block/piston/PistonStructureResolver;resolve()Z"))
+	boolean ocwoStretchIfAnchored(PistonStructureResolver resolver, Operation<Boolean> original,
+	                              @Local(argsOnly = true) Level level, @Local(argsOnly = true) BlockPos pos,
+	                              @Local(argsOnly = true) Direction direction, @Local(argsOnly = true) boolean extending) {
+		boolean ok = original.call(resolver);
+		if (extending || !isSticky || level.isClientSide()) return ok;
+		SpongeLogic.beginSync();
+		try {
+			if (SpongeLogic.stretchIfAnchored((ServerLevel) level, pos, direction, ok ? resolver.getToPush() : null)) return false;
+		} finally {
+			SpongeLogic.endSync((ServerLevel) level);
+		}
+		return ok;
 	}
 
 	/** OCWO sponges: the piston gets its extension event when a sponge rule lets it extend. */
@@ -58,16 +84,12 @@ public class PistonBaseBlockMixin {
 			target = "Lnet/minecraft/world/level/Level;getRandom()Lnet/minecraft/util/RandomSource;", ordinal = 0))
 	void ocwoRestretch(BlockState state, Level level, BlockPos pos, int b0, int b1, CallbackInfoReturnable<Boolean> cir) {
 		if (level.isClientSide() || !isSticky || (b0 != 1 && b0 != 2)) return;
-		SpongePistons.beforeRetract((ServerLevel) level, pos, state.getValue(PistonBaseBlock.FACING));
-	}
-
-	/** OCWO sponges: a sticky piston pulling a sponge held on the other side stretches it. */
-	@WrapOperation(method = "triggerEvent", at = @At(value = "INVOKE",
-			target = "Lnet/minecraft/world/level/block/piston/PistonBaseBlock;moveBlocks(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/Direction;Z)Z",
-			ordinal = 1))
-	boolean ocwoStretchSponge(PistonBaseBlock self, Level level, BlockPos pos, Direction direction, boolean extending, Operation<Boolean> original) {
-		if (!level.isClientSide() && SpongeLogic.tryStretch((ServerLevel) level, pos, direction)) return true;
-		return original.call(self, level, pos, direction, extending);
+		SpongeLogic.beginSync();
+		try {
+			SpongePistons.beforeRetract((ServerLevel) level, pos, state.getValue(PistonBaseBlock.FACING));
+		} finally {
+			SpongeLogic.endSync((ServerLevel) level);
+		}
 	}
 
 	/** OCWO sponges: a double sponge moves only across its axis (along it, a piston presses it again: SpongePistons). */

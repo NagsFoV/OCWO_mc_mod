@@ -70,7 +70,8 @@
 	"gamerule.ocwo.reservoir_min_blocks": "Smallest abstract reservoir (blocks)",
 	"gamerule.ocwo.reservoir_min_blocks.description": "A body of natural water at rest with at least this many blocks is one tank: the water taken from it comes off its surface, which goes down evenly, without waking the whole body. Smaller bodies flow normally. 0 = no reservoirs",
 	"ocwo.water.ledger.sources": "zone sources (outlets of saturated ground): %s %s",
-	"tooltip.ocwo.sponge_water": "Water: %s levels",
+	"tooltip.ocwo.sponge_water": "Filled: %s / 64 levels",
 	"gamerule.ocwo.sponge_drying": "Sponges dry",
-	"gamerule.ocwo.sponge_drying.description": "In the open, in hot biomes where it never rains (desert, badlands, savanna), sponges slowly dry: a full sponge in about one day. The water goes to the clouds"
+	"gamerule.ocwo.sponge_drying.description": "In the open, in hot biomes where it never rains (desert, badlands, savanna), sponges slowly dry: a full sponge in about one day. The water goes to the clouds",
+	"ocwo.debug.block.sponge_fill": "Sponge: filled %s / %s levels"
 }

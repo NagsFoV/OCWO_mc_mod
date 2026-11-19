@@ -57,7 +57,8 @@
 	"gamerule.ocwo.reservoir_min_blocks": "Plus petit réservoir abstrait (blocs)",
 	"gamerule.ocwo.reservoir_min_blocks.description": "Une masse d'eau naturelle au repos d'au moins ce nombre de blocs est un seul réservoir : l'eau qu'on lui prend est retirée de sa surface, qui baisse d'un coup régulier, sans réveiller toute la masse. Les masses plus petites s'écoulent normalement. 0 = aucun réservoir",
 	"ocwo.water.ledger.sources": "sources de la zone (débouchés de sols saturés) : %s %s",
-	"tooltip.ocwo.sponge_water": "Eau : %s niveaux",
+	"tooltip.ocwo.sponge_water": "Remplissage : %s / 64 niveaux",
 	"gamerule.ocwo.sponge_drying": "Séchage des éponges",
-	"gamerule.ocwo.sponge_drying.description": "À l'air libre, dans les biomes chauds où il ne pleut jamais (désert, badlands, savane), les éponges sèchent lentement : une éponge pleine en environ un jour. L'eau part aux nuages"
+	"gamerule.ocwo.sponge_drying.description": "À l'air libre, dans les biomes chauds où il ne pleut jamais (désert, badlands, savane), les éponges sèchent lentement : une éponge pleine en environ un jour. L'eau part aux nuages",
+	"ocwo.debug.block.sponge_fill": "Éponge : remplissage %s / %s niveaux"
 }

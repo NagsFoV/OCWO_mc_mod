@@ -45,7 +45,12 @@ public final class MoistureCommand {
 		String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
 		StringBuilder sb = new StringBuilder();
 		sb.append(id).append(" @ ").append(pos.toShortString()).append('\n');
-		if (props == null || !props.holdsMoisture()) {
+		if (io.github.nagsfov.ocwo.sponge.OcwoSponges.isAnySponge(state)) {
+			// a sponge is a bucket: its fill level, in whole levels (stored where moisture is, but it is not moisture)
+			int fill = io.github.nagsfov.ocwo.sponge.SpongeLogic.poolUnits(level, pos) / Moisture.UNITS_PER_LEVEL;
+			int cap = io.github.nagsfov.ocwo.sponge.SpongeLogic.poolCapacity(level, pos) / Moisture.UNITS_PER_LEVEL;
+			sb.append("Éponge : remplissage ").append(fill).append(" / ").append(cap).append(" niveaux");
+		} else if (props == null || !props.holdsMoisture()) {
 			sb.append("Pas d'humidité (matériau ").append(props == null ? "aucun" : props.material()).append(")");
 			if (units > 0) sb.append(" - en attente de libération : ").append(units).append(" unités");
 		} else {

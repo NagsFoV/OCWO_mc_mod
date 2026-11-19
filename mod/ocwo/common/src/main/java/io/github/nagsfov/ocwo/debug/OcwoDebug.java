@@ -257,6 +257,13 @@ public final class OcwoDebug {
 		if (!inner.isEmpty()) out.add(line("ocwo.debug.block.inner", inner.getAmount(), flags(level, pos, inner)));
 		MoistureProps props = MoistureData.get(state);
 		int units = sim.units(pos);
+		if (io.github.nagsfov.ocwo.sponge.OcwoSponges.isAnySponge(state)) {
+			// a sponge is a bucket: its fill level in whole levels, not a moisture
+			out.add(line("ocwo.debug.block.sponge_fill",
+					io.github.nagsfov.ocwo.sponge.SpongeLogic.poolUnits(level, pos) / Moisture.UNITS_PER_LEVEL,
+					io.github.nagsfov.ocwo.sponge.SpongeLogic.poolCapacity(level, pos) / Moisture.UNITS_PER_LEVEL));
+			return;
+		}
 		if (props == null || !props.holdsMoisture()) {
 			out.add(props == null ? line("ocwo.debug.block.no_moisture") : line("ocwo.debug.block.no_moisture_material", props.material()));
 			if (units > 0) out.add(line("ocwo.debug.block.pending_release", units));

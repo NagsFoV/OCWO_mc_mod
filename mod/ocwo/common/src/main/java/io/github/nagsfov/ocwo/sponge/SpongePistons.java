@@ -22,8 +22,8 @@ import java.util.Set;
  * and the line is read again:
  * <ol>
  *   <li>a sponge never pushes a block other than a sponge (slime and honey stuck to it move with it): it is crushed
- *   (destroyed, its water given back through its 4 side cells, dropped dry), or, if a sponge pushes it, the two are
- *   pressed into a double sponge (each gives back half its water);</li>
+ *   (destroyed, its water given back through its 4 side cells, dropped dry); in a blocked run of sponges, the two
+ *   nearest to what pushes them are pressed into a double sponge (each gives back half its levels);</li>
  *   <li>a sponge pushed against a double or stretched sponge is crushed;</li>
  *   <li>a double sponge pressed again along its axis breaks: two sponges drop, each with its share;</li>
  *   <li>a stretched sponge pushed along its axis (by the piston head or another block) is one sponge again, in its far
@@ -69,12 +69,13 @@ public final class SpongePistons {
 					pusher = s;
 					continue;
 				}
-				BlockPos sponge = base.relative(dir, i - 1);
-				boolean otherSponge = OcwoSponges.isStretched(s) || OcwoSponges.isCompressed(s);
-				if (!otherSponge && i >= 3 && OcwoSponges.isSponge(level.getBlockState(base.relative(dir, i - 2)))) {
-					return new Action(Kind.PRESS, base.relative(dir, i - 2), sponge, dir);
-				}
-				return new Action(Kind.CRUSH, sponge, null, dir);
+				// the run of sponges ending here is blocked (by any block, a double or stretched sponge included): the two
+				// sponges nearest to what pushes them are pressed together (the double sponge against the piston); a lone
+				// sponge is crushed
+				int first = i - 1;
+				while (first > 1 && OcwoSponges.isSponge(level.getBlockState(base.relative(dir, first - 1)))) first--;
+				if (first < i - 1) return new Action(Kind.PRESS, base.relative(dir, first), base.relative(dir, first + 1), dir);
+				return new Action(Kind.CRUSH, base.relative(dir, i - 1), null, dir);
 			}
 			if (OcwoSponges.isStretched(s)) {
 				if (s.getValue(StretchedSpongeBlock.FACING) == dir && SpongeLogic.otherHalf(level, p, s) != null) {
@@ -119,7 +120,8 @@ public final class SpongePistons {
 				if (!room(level, sides, levels, blocked)) return false;
 				if (dryRun) return true;
 				BlockState was = level.getBlockState(c);
-				SpongeLogic.setUnits(level, c, u - levels * U); // the fraction of a level stays in the cell
+				SpongeLogic.whole(level, c, u); // whole levels only: the fraction goes up
+				SpongeLogic.setUnits(level, c, 0);
 				SpongeLogic.set(level, c, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
 				level.levelEvent(2001, c, Block.getId(was));
 				SpongeLogic.releaseFrom(level, sides, levels, blocked, false);
@@ -128,14 +130,17 @@ public final class SpongePistons {
 			}
 			case PRESS -> {
 				BlockPos w = a.a, v = a.b; // w pushes v
-				int uw = SpongeLogic.units(level, w), uv = SpongeLogic.units(level, v);
-				int levels = (uw / 2 + uv / 2) / U;
-				int keep = uw + uv - levels * U;
+				// whole levels: each gives back half its levels (rounded down), the double sponge keeps the rest
+				int lw = SpongeLogic.units(level, w) / U, lv = SpongeLogic.units(level, v) / U;
+				int levels = lw / 2 + lv / 2;
+				int keep = (lw + lv - levels) * U;
 				List<BlockPos> sides = new ArrayList<>(sides(w, a.dir));
 				sides.addAll(sides(v, a.dir));
 				Set<BlockPos> blocked = Set.of(w, v, v.relative(a.dir), w.relative(a.dir.getOpposite()));
 				if (!room(level, sides, levels, blocked)) return false;
 				if (dryRun) return true;
+				SpongeLogic.whole(level, w, SpongeLogic.units(level, w)); // the fractions go up
+				SpongeLogic.whole(level, v, SpongeLogic.units(level, v));
 				SpongeLogic.setUnits(level, w, 0);
 				SpongeLogic.set(level, w, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
 				SpongeLogic.setUnits(level, v, keep);
