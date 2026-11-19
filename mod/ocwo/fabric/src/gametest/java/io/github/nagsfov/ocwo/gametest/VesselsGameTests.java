@@ -88,6 +88,12 @@ public class VesselsGameTests {
 		BlockState air = Blocks.AIR.defaultBlockState();
 		BlockState water = Blocks.WATER.defaultBlockState();
 		int tz0 = 1 + (w - tw) / 2;
+		// the water is simulated in ticking chunks only: a long build can reach a chunk the test does not keep ticking
+		// (the right vessel was then left out of the body and the case stalled, depending on where the test landed)
+		BlockPos a = h.absolutePos(BlockPos.ZERO), b = h.absolutePos(new BlockPos(xMax, 0, zMax));
+		for (int cx = Math.min(a.getX(), b.getX()) >> 4; cx <= Math.max(a.getX(), b.getX()) >> 4; cx++)
+			for (int cz = Math.min(a.getZ(), b.getZ()) >> 4; cz <= Math.max(a.getZ(), b.getZ()) >> 4; cz++)
+				level.setChunkForced(cx, cz, true);
 		for (int x = 0; x <= xMax; x++)
 			for (int z = 0; z <= zMax; z++)
 				for (int y = 0; y <= height + 1; y++) {
