@@ -195,6 +195,38 @@ public final class WaterReserves extends SavedData {
 		return whole;
 	}
 
+	// ------------------------------------------------------------------ zone sources
+
+	/**
+	 * Zone sources (03, "Sources de zone"): zone of the seeping blocks -> outlets (positions) of their saturated
+	 * clusters, reused while they stay free and touch the wet blocks. Saved.
+	 */
+	private final it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<it.unimi.dsi.fastutil.longs.LongArrayList> sources =
+			new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>();
+	private static final it.unimi.dsi.fastutil.longs.LongArrayList NONE = new it.unimi.dsi.fastutil.longs.LongArrayList();
+
+	/** The outlets recorded by a zone (do not change the list). */
+	public it.unimi.dsi.fastutil.longs.LongArrayList sourcesOf(long zone) {
+		var l = sources.get(zone);
+		return l == null ? NONE : l;
+	}
+
+	public void addSource(long zone, BlockPos outlet) {
+		var l = sources.computeIfAbsent(zone, k -> new it.unimi.dsi.fastutil.longs.LongArrayList());
+		if (!l.contains(outlet.asLong())) {
+			l.add(outlet.asLong());
+			setDirty();
+		}
+	}
+
+	public void removeSource(long zone, long outlet) {
+		var l = sources.get(zone);
+		if (l != null && l.rem(outlet)) {
+			if (l.isEmpty()) sources.remove(zone);
+			setDirty();
+		}
+	}
+
 	// ------------------------------------------------------------------ End portals (Overworld)
 
 	/** Activated End portals of the Overworld (one position per portal), for the water destroyed in the End. */
@@ -321,6 +353,10 @@ public final class WaterReserves extends SavedData {
 		long[] ev = root.getLongArray("evaporating").orElse(new long[0]);
 		for (int i = 0; i < Math.min(ek.length, ev.length); i++) r.evaporating.put(ek[i], Double.longBitsToDouble(ev[i]));
 		r.endPortals.addElements(0, root.getLongArray("endPortals").orElse(new long[0]));
+		long[] sz = root.getLongArray("sourceZones").orElse(new long[0]);
+		long[] sp = root.getLongArray("sources").orElse(new long[0]);
+		for (int i = 0; i < Math.min(sz.length, sp.length); i++)
+			r.sources.computeIfAbsent(sz[i], k -> new it.unimi.dsi.fastutil.longs.LongArrayList()).add(sp[i]);
 		return r;
 	}
 
@@ -335,6 +371,14 @@ public final class WaterReserves extends SavedData {
 		root.put("evaporatingZones", new LongArrayTag(ek));
 		root.put("evaporating", new LongArrayTag(ev));
 		root.put("endPortals", new LongArrayTag(endPortals.toLongArray()));
+		it.unimi.dsi.fastutil.longs.LongArrayList sz = new it.unimi.dsi.fastutil.longs.LongArrayList(), sp = new it.unimi.dsi.fastutil.longs.LongArrayList();
+		for (var e : sources.long2ObjectEntrySet())
+			for (int i = 0; i < e.getValue().size(); i++) {
+				sz.add(e.getLongKey());
+				sp.add(e.getValue().getLong(i));
+			}
+		root.put("sourceZones", new LongArrayTag(sz.toLongArray()));
+		root.put("sources", new LongArrayTag(sp.toLongArray()));
 		return root;
 	}
 }

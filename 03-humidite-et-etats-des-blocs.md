@@ -175,7 +175,7 @@ Une section reçoit sa couche, remplie avec cet équilibre (sans créer ni perdr
 Un pas d'un bloc :
 1. **absorption** : prend 1 niveau d'eau à un bloc d'eau voisin, avec une probabilité liée à la perméabilité de la face ;
 2. **transmission** aux voisins poreux, selon l'écart de remplissage et la plus faible des deux perméabilités (par face, ou par axe pour les blocs orientés), avec un biais vers le bas ;
-3. **suintement** (règle unique) : un bloc saturé qui reçoit encore (de l'eau ou un voisin saturé au-dessus ou sur le côté) donne 1 niveau d'eau à une case libre en dessous ou à côté, jamais au-dessus, sauf s'il « retient l'eau » ou change d'état à ce stade ;
+3. **suintement** (règle unique) : un bloc saturé qui reçoit encore (de l'eau ou un voisin saturé au-dessus ou sur le côté) donne 1 niveau d'eau à une case libre en dessous ou à côté, jamais au-dessus, sauf s'il « retient l'eau » ou change d'état à ce stade ; depuis le 19/11/2026, ce niveau sort au débouché de l'amas saturé (voir « Sources de zone ») ;
 4. **changement d'état** : terre → boue au stade « mouillé », boue → terre sous « humide » (hystérésis), poudre de béton → béton de la même couleur, éponge → éponge mouillée. L'humidité est conservée à travers le changement.
 
 Les blocs deviennent actifs quand l'eau bouge à côté d'eux, quand un bloc poreux est posé ou cassé, et par un échantillonnage autour des joueurs (eau immobile contre un bloc poreux). Quand un bloc perd sa capacité (cassé, remplacé), son humidité est rendue en eau sur place ou à côté. Ce qui ne trouve pas de place reste stocké et sera rendu plus tard : rien n'est jamais perdu.
@@ -305,6 +305,20 @@ Les fractions d'unité s'additionnent dans un accumulateur par zone (sauvegardé
 **Dimensions** (règle de Valentin) : l'eau qui monte dans le Nether va dans les nuages de la zone de l'Overworld aux coordonnées correspondantes (×8). Celle qui monte dans l'End va dans les nuages d'une zone de l'Overworld tirée au hasard entre le point d'apparition du monde et un portail de l'End activé (le point d'apparition tant qu'aucun portail activé n'est connu ; les portails sont retenus quand on les active, pas ceux activés avant cette version). Les autres dimensions gardent leurs nuages.
 
 **Tests** : `CheckEvaporationGameTests` (facteurs de biome ; un bassin sur un sol de terre : eau + évaporation constant à chaque tick, les nuages grandissent de ce qui monte, et ce qui monte vaut le taux de la règle à l'arrondi près : 6,99 % pour 7,00 % attendus dans le désert du monde de test). Les autres tests d'humidité comptent l'eau évaporée là où elle a quitté le sol : les nuages d'une zone sont partagés entre les tests qui s'y trouvent.
+
+### Sources de zone
+
+Avant, un bloc saturé qui reçoit encore de l'eau suintait dans une case libre juste à côté de lui : l'eau ressortait un peu partout, souvent à la hauteur où elle entrait. Maintenant, elle ressort au **débouché de son amas** :
+- l'amas : les blocs saturés reliés au bloc qui suinte, par des faces qui laissent passer l'eau ;
+- le débouché : la case libre la plus basse sous l'amas ou à côté de lui, jamais plus haut que le bloc qui suinte. À égalité, la première trouvée. Recherche bornée (256 blocs de l'amas au plus) et déterministe (ordre fixe : bas, côtés, haut) ;
+- la zone de 4×4 chunks du bloc enregistre ce débouché (sauvegardé). Les blocs de cette zone à moins de 8 blocs du débouché, et pas plus bas que lui, le réutilisent sans refaire la recherche, tant qu'il est libre et qu'il touche encore un bloc du sol humide ;
+- quand il est plein (ou bouché), la zone l'oublie et la recherche suivante en trouve un autre.
+
+L'eau traverse ainsi un sol saturé et ressort en une source stable au pied de la pente : c'est le début d'un ruisseau. Le tirage au sort ne décide que du moment où un bloc suinte (ticks aléatoires), jamais de l'endroit où l'eau sort.
+
+`/ocwo water ledger` liste aussi les sources de la zone.
+
+**Test** : `CheckZoneSourceGameTests` (un bassin derrière un mur de gravier et une chambre vide : la première eau sort au pied du mur, la zone a enregistré ce débouché, une seule recherche pour 60 niveaux sortis, eau + évaporation constant), seul dans son lot.
 
 ## Questions ouvertes
 

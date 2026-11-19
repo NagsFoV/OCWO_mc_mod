@@ -19,7 +19,7 @@ Aucun Gradle ni serveur de test bloqué. Une copie de sauvegarde de tout ce trav
 | 2 | Registre d'eau par zone de 4×4 chunks | fait, tests verts |
 | 3 | Évaporation à chaque transfert d'humidité | fait, tests verts |
 | 4 | Réservoirs abstraits pour les grandes masses d'eau au repos | fait, tests verts |
-| 5 | Sources de zone | à faire |
+| 5 | Sources de zone | fait, tests verts |
 
 ## Étape 1 : moins de matériaux humides
 
@@ -67,6 +67,12 @@ Tests : nouveau `CheckReservoirGameTests` (seul dans son lot) ; scénarios de pe
 
 **Fuite corrigée en passant** (trouvée par le test de registre) : une tâche d'écoulement qui faisait plusieurs mouvements depuis le même bloc d'eau naturelle faisait payer le deuxième deux fois, et l'égalisation pouvait créer de l'eau. Elles paient maintenant exactement le changement décidé.
 
+## Étape 5 : sources de zone
+
+Détail dans `03-humidite-et-etats-des-blocs.md`, « Sources de zone ». Un bloc saturé qui suinte donne son niveau au débouché de son amas saturé : la case libre la plus basse sous ou à côté de l'amas, jamais au-dessus du bloc (recherche bornée à 256 blocs, ordre fixe). La zone enregistre ce débouché et le réutilise sans nouvelle recherche tant qu'il est libre et touche le sol humide.
+
+Test : nouveau `CheckZoneSourceGameTests` (seul dans son lot) : l'eau sort au pied du mur, une recherche pour 60 niveaux sortis.
+
 ## Choix faits seul
 
 - **Poudre de béton** : gardée humide (capacité 1), alors qu'elle n'est pas dans la liste. Sans humidité, elle ne pourrait plus devenir du béton au contact de l'eau.
@@ -79,3 +85,6 @@ Tests : nouveau `CheckReservoirGameTests` (seul dans son lot) ; scénarios de pe
 - **Réservoirs : ordre de paiement** : la réserve de la zone d'abord, puis la masse d'eau elle-même. L'eau versée dans de l'eau naturelle va toujours à la réserve (la surface d'un lac ne remonte pas toute seule).
 - **Réservoirs : quels blocs baissent** : les blocs de surface les plus hauts, à égalité les plus proches de la sortie, jamais le bloc qui perd l'eau lui-même, seulement des blocs d'eau simples au repos (pas d'algues ni de blocs waterloggés).
 - **Réservoirs : la pression aussi** : sans ça, la pression vidait l'eau naturelle réveillée pour de vrai et le réveil gagnait tout le lac.
+- **Sources : « tant qu'il touche la zone »** compris comme « tant que le débouché touche un bloc du sol humide » (saturé ou non). Avec « saturé », le débouché se perdait à chaque niveau sorti (le bloc qui venait de suinter n'est plus saturé) : 17 recherches pour 53 niveaux au lieu d'une.
+- **Sources : à quels blocs sert un débouché** : ceux de la même zone de 4×4 chunks, à 8 blocs au plus, pas plus bas que lui. On ne vérifie pas que le bloc fait partie du même amas (ce serait refaire la recherche) : deux amas voisins à moins de 8 blocs peuvent partager un débouché.
+- **Sources : seuil de l'amas** : le même que l'ancien suintement (bloc saturé qui reçoit encore, sauf s'il retient l'eau ou change d'état à ce stade).

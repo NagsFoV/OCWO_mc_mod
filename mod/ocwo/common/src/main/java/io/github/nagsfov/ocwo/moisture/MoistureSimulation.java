@@ -32,8 +32,9 @@ import net.minecraft.world.level.material.Fluids;
  * <ol>
  *   <li>absorption: takes one water level from a neighbouring water block (if not full);</li>
  *   <li>transmission: shares moisture with porous neighbours, by fill ratio and permeability, biased downwards;</li>
- *   <li>seepage: a saturated block that still has a supply gives one level of water to a free cell below or
- *   beside it (never above), unless it retains its water or changes state at that stage;</li>
+ *   <li>seepage: a saturated block that still has a supply gives one level of water, unless it retains its water or
+ *   changes state at that stage; the level comes out at the outlet of its saturated cluster (zone source): the lowest
+ *   free cell below or beside the cluster, never above the block, recorded by the zone and reused;</li>
  *   <li>state change: e.g. dirt to mud when wet, mud back to dirt when dry (hysteresis); moisture is kept.</li>
  * </ol>
  * Water is conserved exactly: 1 water level = {@link Moisture#UNITS_PER_LEVEL} units of moisture.
@@ -419,14 +420,17 @@ public final class MoistureSimulation {
 		if (h > cap || (h >= cap && supply && !props.retains() && !changesWhenSaturated)) {
 			int perm = Math.max(1, props.permeability());
 			if (h > cap || random.nextInt(10) < perm) {
-				for (Direction d : SEEP_DIRS) {
-					if (h < U) break;
-					BlockPos n = pos.relative(d);
-					if (!level.isLoaded(n)) continue;
-					if (props.permeability(state, d) <= 0 && h <= cap) continue;
-					if (putWater(n)) {
+				// the water comes out at the outlet of the saturated cluster (zone source, 03 "Sources de zone")
+				for (int tries = 0; tries < 2 && h >= U; tries++) {
+					BlockPos out = outlet(pos);
+					if (out == null) break;
+					if (putWater(out)) {
 						h -= U;
+						sourceSeeps++;
 						if (h <= cap) break;
+						tries = -1; // over capacity: on while the outlet takes it
+					} else {
+						io.github.nagsfov.ocwo.fluids.WaterReserves.get(level).removeSource(io.github.nagsfov.ocwo.fluids.WaterReserves.zone(pos), out.asLong());
 					}
 				}
 			}
@@ -486,6 +490,101 @@ public final class MoistureSimulation {
 			if (num > (long) (props.capacity() + np.capacity()) && h2 < np.capacity()) return true;
 		}
 		return false;
+	}
+
+	// ------------------------------------------------------------------ zone sources
+
+	/** A block uses a recorded outlet of its zone within this distance (about as far as the cluster search goes). */
+	public static final int SOURCE_RADIUS = 8;
+	/** Most blocks of a saturated cluster looked at to find its outlet. */
+	public static final int SOURCE_SEARCH = 256;
+	/** Order of the cluster search: down first, then the sides, up last. */
+	private static final Direction[] CLUSTER_ORDER = {Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.UP};
+	/** Diagnostics: outlet searches, levels that came out at an outlet (since the server started). */
+	public static long sourceSearches, sourceSeeps;
+
+	/**
+	 * Zone source (03, "Sources de zone"): where the water of the saturated cluster of pos comes out. An outlet recorded
+	 * by the zone of pos is reused while it is free and still touches the wet blocks (no new search); otherwise the
+	 * cluster's best outlet is searched (bounded, deterministic) and the zone records it. Null: no outlet.
+	 */
+	private BlockPos outlet(BlockPos pos) {
+		var ledger = io.github.nagsfov.ocwo.fluids.WaterReserves.get(level);
+		long zone = io.github.nagsfov.ocwo.fluids.WaterReserves.zone(pos);
+		var list = ledger.sourcesOf(zone);
+		for (int i = 0; i < list.size(); i++) {
+			BlockPos o = BlockPos.of(list.getLong(i));
+			if (o.getY() > pos.getY() || Math.abs(o.getX() - pos.getX()) > SOURCE_RADIUS || pos.getY() - o.getY() > SOURCE_RADIUS
+					|| Math.abs(o.getZ() - pos.getZ()) > SOURCE_RADIUS) continue; // another cluster's
+			if (validOutlet(o)) return o;
+			ledger.removeSource(zone, list.getLong(i)); // filled, blocked, or no longer touching wet blocks
+			i--;
+		}
+		BlockPos found = searchOutlet(pos);
+		if (found != null) ledger.addSource(zone, found);
+		return found;
+	}
+
+	/**
+	 * Free (it can take a level) and next to a block of the wet ground above it or beside it (saturated or not: the
+	 * block that just gave its level is not saturated any more, the outlet is still the cluster's).
+	 */
+	private boolean validOutlet(BlockPos o) {
+		if (!canTakeWater(o)) return false;
+		for (Direction d : new Direction[]{Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST}) {
+			BlockPos n = o.relative(d);
+			if (!level.isLoaded(n)) continue;
+			MoistureProps np = MoistureData.get(level.getBlockState(n));
+			if (np != null && np.holdsMoisture() && units(n) > 0) return true;
+		}
+		return false;
+	}
+
+	/**
+	 * The best outlet of the saturated cluster of start: breadth first through the saturated blocks (fixed order, up to
+	 * {@link #SOURCE_SEARCH} blocks, through faces that let water through), the free cells below or beside them, never
+	 * above start; the lowest wins, the first found on a tie.
+	 */
+	private BlockPos searchOutlet(BlockPos start) {
+		sourceSearches++;
+		it.unimi.dsi.fastutil.longs.LongOpenHashSet seen = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+		java.util.ArrayDeque<BlockPos> queue = new java.util.ArrayDeque<>();
+		seen.add(start.asLong());
+		queue.add(start);
+		BlockPos best = null;
+		while (!queue.isEmpty()) {
+			BlockPos c = queue.poll();
+			BlockState cs = level.getBlockState(c);
+			MoistureProps cp = MoistureData.get(cs);
+			if (cp == null || !cp.holdsMoisture()) continue;
+			for (Direction d : SEEP_DIRS) {
+				BlockPos n = c.relative(d);
+				if (n.getY() > start.getY() || cp.permeability(cs, d) <= 0) continue;
+				if ((best == null || n.getY() < best.getY()) && canTakeWater(n)) best = n;
+			}
+			if (seen.size() >= SOURCE_SEARCH) continue;
+			for (Direction d : CLUSTER_ORDER) {
+				BlockPos n = c.relative(d);
+				if (seen.contains(n.asLong()) || !level.isLoaded(n)) continue;
+				BlockState ns = level.getBlockState(n);
+				MoistureProps np = MoistureData.get(ns);
+				if (np == null || !np.holdsMoisture() || units(n) < np.capacity()) continue;
+				if (Math.min(cp.permeability(cs, d), np.permeability(ns, d.getOpposite())) <= 0) continue;
+				seen.add(n.asLong());
+				queue.add(n);
+			}
+		}
+		return best;
+	}
+
+	/** This cell can take one more water level (air, replaceable, or water that is not full and not falling). */
+	private boolean canTakeWater(BlockPos n) {
+		if (!level.isLoaded(n)) return false;
+		FluidState fs = level.getFluidState(n);
+		if (isWater(fs)) return fs.getAmount() < FluidUtils.MAX_LEVEL && !PressureFalling.is(fs);
+		if (!fs.isEmpty()) return false;
+		BlockState ns = level.getBlockState(n);
+		return ns.isAir() || ns.canBeReplaced(Fluids.WATER);
 	}
 
 	/** Adds one water level in this cell if it can take it (air, replaceable, or water that is not full). */

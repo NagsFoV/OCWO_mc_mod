@@ -126,6 +126,10 @@ public final class OcwoDebug {
 		source.sendSuccess(() -> Component.translatable("ocwo.water.ledger.stocks", levels(count.liquidUnits()), levels(count.moistureUnits()),
 				levels(count.reserveUnits()), levels(count.cloudUnits())), false);
 		source.sendSuccess(() -> Component.translatable("ocwo.water.ledger.total", count.total(), levels(count.total())), false);
+		var sources = io.github.nagsfov.ocwo.fluids.WaterReserves.get(level).sourcesOf(zone);
+		StringBuilder list = new StringBuilder();
+		for (int i = 0; i < Math.min(5, sources.size()); i++) list.append(i == 0 ? "" : "; ").append(BlockPos.of(sources.getLong(i)).toShortString());
+		source.sendSuccess(() -> Component.translatable("ocwo.water.ledger.sources", sources.size(), list.toString()), false);
 		return (int) Math.min(Integer.MAX_VALUE, count.total() / Moisture.UNITS_PER_LEVEL);
 	}
 
