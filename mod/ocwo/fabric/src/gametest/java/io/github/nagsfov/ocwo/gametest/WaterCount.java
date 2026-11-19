@@ -38,7 +38,22 @@ final class WaterCount {
 	 * tests started, in units. This is what must stay constant for a closed box.
 	 */
 	static long units(GameTestHelper h, int x0, int y0, int z0, int x1, int y1, int z1) {
-		return blockUnits(h, x0, y0, z0, x1, y1, z1) + sentUp(h, x0, y0, z0, x1, y1, z1);
+		return blockUnits(h, x0, y0, z0, x1, y1, z1) + sentUp(h, x0, y0, z0, x1, y1, z1) + itemUnits(h, x0, y0, z0, x1, y1, z1);
+	}
+
+	/** Water carried by the sponge items lying in the box (plus {@link #MARGIN}), in units. */
+	static long itemUnits(GameTestHelper h, int x0, int y0, int z0, int x1, int y1, int z1) {
+		BlockPos a = h.absolutePos(new BlockPos(x0 - MARGIN, y0 - MARGIN, z0 - MARGIN));
+		BlockPos b = h.absolutePos(new BlockPos(x1 + MARGIN, y1 + MARGIN, z1 + MARGIN));
+		net.minecraft.world.phys.AABB box = new net.minecraft.world.phys.AABB(
+				Math.min(a.getX(), b.getX()), Math.min(a.getY(), b.getY()), Math.min(a.getZ(), b.getZ()),
+				Math.max(a.getX(), b.getX()) + 1, Math.max(a.getY(), b.getY()) + 1, Math.max(a.getZ(), b.getZ()) + 1);
+		long sum = 0;
+		for (var item : h.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, box)) {
+			var stack = item.getItem();
+			sum += (long) io.github.nagsfov.ocwo.sponge.OcwoSponges.itemLevels(stack) * stack.getCount() * Moisture.UNITS_PER_LEVEL;
+		}
+		return sum;
 	}
 
 	/** Units its blocks sent up to the clouds (evaporation), box plus {@link #MARGIN}. */

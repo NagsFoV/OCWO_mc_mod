@@ -26,6 +26,8 @@
 		"_fluids.tweaks.PointedDripstoneBlockMixin",
 		"_fluids.tweaks.SpongeBlockMixin",
 		"_fluids.tweaks.WetSpongeBlockMixin",
+		"_fluids.tweaks.BlockSpongeMixin",
+		"_fluids.tweaks.FurnaceSpongeMixin",
 		"_fluids.FlowingFluidCeilingMixin",
 		"GameRuleMapMixin",
 		"_fluids.LevelChunkRestMixin",

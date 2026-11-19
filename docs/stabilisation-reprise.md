@@ -108,3 +108,18 @@ Test : nouveau `CheckZoneSourceGameTests` (seul dans son lot) : l'eau sort au pi
 - End : seuls les portails activés après cette version sont connus (sinon, le point d'apparition).
 - Règle `ocwo:water_hot_fluid_evaporation` inutilisée ; glace et neige pas encore dans le registre.
 - Test `seagrassOnSandSurvives` : échecs rares déjà connus avant ce chantier (14, 15 et 16/11).
+
+## Éponges v2 (19/11/2026, branche `eponges-v2`)
+
+Nouvelles règles de Valentin (son message de 10:50), avec les choix par défaut de l'assistant du projet. Détail dans `03-humidite-et-etats-des-blocs.md`, « Éponges » ; tous les choix réglables sont dans `SpongeRules`. Travail fait sur la branche `eponges-v2`, partie de `stabilisation`, poussée sur `claude/project-thread-631nn1`.
+
+Fait : éponge = seau (plus d'échange avec le sol, séchage au chaud et au sec en un jour de jeu, règle `ocwo:sponge_drying`) ; partage de l'eau entre éponges voisines ; éponge étirée = une seule éponge de 128 niveaux qui absorbe par l'une ou l'autre moitié ; éponge compressée et éponge étirée qui ne tiennent que sous condition ; règles de piston (une éponge ne pousse jamais un autre bloc, écrasement par les 4 côtés, compression, éponge compressée pressée de nouveau ou poussée de côté, éponge étirée repoussée ou étirée de nouveau, la ligne de Valentin) ; objets qui gardent leur eau (composant `ocwo:sponge_water`) ; four ; saut et atterrissage. 25 tests des éponges, 49 tests courants et 22 vases verts.
+
+Choix faits seul (en plus des choix par défaut de l'assistant du projet) :
+- **Écrasement sans assez de place** : si l'eau d'une éponge écrasée (ou des deux éponges compressées) ne trouve pas assez de place en partant des 4 côtés, le piston ne pousse pas du tout (comme quand aucun côté n'est libre). Sinon il aurait fallu perdre de l'eau ou la mettre dans la tête du piston, ce qui est interdit.
+- **Lecture de la ligne de poussée** : seulement sur l'axe du piston. Une éponge entraînée sur le côté par du slime n'est pas vérifiée (limite connue).
+- **Objets** : une éponge étirée ou compressée cassée en mode créatif lâche quand même ses objets (sinon son eau serait perdue). Les éponges mouillées en objet d'avant cette version (sans composant) ne portent pas d'eau : posées, elles sont sèches ; au four, elles ne remplissent plus de seau (avant, le seau se remplissait à partir de rien).
+- **Saut** : compte comme saut une chute d'au moins 1 bloc (descendre une dalle ne presse pas l'éponge) ; atterrissage fort au-delà de 3 blocs.
+- **Partage** : en proportion de la contenance (une éponge étirée compte double), les éponges compressées n'y participent pas.
+- **Cases libérées** : quand une éponge étirée ou compressée change de forme ou casse, l'eau rejetée peut aller dans la case qu'elle vient de libérer (sauf quand un bloc poussé va l'occuper).
+- **Mode serveur seul** (sans le mod chez les joueurs) : pas de composant d'objet, une éponge cassée rend son eau autour d'elle comme avant.

@@ -56,5 +56,8 @@
 	"gamerule.ocwo.moisture_evaporation.description": "Pourcentage de chaque transfert d'humidité (eau absorbée par un bloc, humidité passée à un voisin) qui s'évapore vers les nuages de la zone, en biome tempéré : moitié moins en biome froid, jusqu'à 3,5 fois plus en biome chaud et sec. 0 = aucune",
 	"gamerule.ocwo.reservoir_min_blocks": "Plus petit réservoir abstrait (blocs)",
 	"gamerule.ocwo.reservoir_min_blocks.description": "Une masse d'eau naturelle au repos d'au moins ce nombre de blocs est un seul réservoir : l'eau qu'on lui prend est retirée de sa surface, qui baisse d'un coup régulier, sans réveiller toute la masse. Les masses plus petites s'écoulent normalement. 0 = aucun réservoir",
-	"ocwo.water.ledger.sources": "sources de la zone (débouchés de sols saturés) : %s %s"
+	"ocwo.water.ledger.sources": "sources de la zone (débouchés de sols saturés) : %s %s",
+	"tooltip.ocwo.sponge_water": "Eau : %s niveaux",
+	"gamerule.ocwo.sponge_drying": "Séchage des éponges",
+	"gamerule.ocwo.sponge_drying.description": "À l'air libre, dans les biomes chauds où il ne pleut jamais (désert, badlands, savane), les éponges sèchent lentement : une éponge pleine en environ un jour. L'eau part aux nuages"
 }

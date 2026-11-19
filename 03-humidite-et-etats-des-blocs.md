@@ -194,65 +194,61 @@ Avec les quotas fixes (15/11/2026), mesuré le même jour sur le même PC (charg
 
 **Tests automatiques** (`CheckMoistureGameTests`, dans les tests courants) : mur de gravier qui suinte (cobblestone jusqu'au 19/11/2026), laine qui retient, obsidienne et cobblestone étanches, terre sous un bassin qui devient boue. Chaque test vérifie à chaque tick que l'eau liquide plus l'humidité ne change pas. Les tests de pression sont désormais construits en obsidienne : avec de la pierre, une partie de l'eau passait dans les murs (comportement normal, mais qui faussait ces tests de pression).
 
-## Éponges (18/11/2026, branche `eponges`, à tester en jeu)
+## Éponges (règles du 18 et du 19/11/2026, branche `eponges-v2`, à tester en jeu)
 
-Règles de Valentin. L'eau est conservée exactement dans chaque cas : eau liquide plus humidité des blocs.
+Règles de Valentin. Rien n'est créé ni détruit : chaque test vérifie que l'eau liquide, l'humidité, ce qui est monté aux nuages et l'eau portée par les objets éponge restent constants. Les choix réglables sont regroupés dans `SpongeRules`.
 
-**L'éponge stocke l'eau** : rien n'est détruit comme en vanilla. L'eau absorbée devient l'humidité de l'éponge (matériau `eponge`, contenance 64 niveaux, soit 8 blocs d'eau pleins). L'éponge aspire tout de suite :
-- quand on la pose ;
-- quand un bloc voisin change.
+### Une éponge est un seau
 
-Elle prend l'eau reliée jusqu'à 6 blocs de distance, sur 64 cases au plus, jusqu'à être pleine. Elle paraît mouillée dès qu'elle tient 1 niveau.
+- Elle a un **niveau de remplissage** de 0 à 64 niveaux (128 pour une éponge étirée). Ce n'est plus une humidité : elle n'échange **rien avec le sol** humide (terre, sable…), seulement avec les blocs d'eau.
+- Elle aspire tout de suite, quand on la pose et quand un bloc voisin change : l'eau reliée jusqu'à 6 blocs de distance, 64 cases au plus, jusqu'à être pleine. Elle paraît mouillée dès qu'elle tient 1 niveau.
+- **Deux éponges qui se touchent** (normales ou étirées, pas compressées) se partagent leur eau, en continu, comme des vases communicants : tout le groupe qui se touche, en proportion de la contenance, en niveaux entiers. Les niveaux en trop vont aux éponges les plus proches de celle qui a bougé.
+- **Séchage** : à l'air libre, dans les biomes sans pluie dont la température de base est d'au moins 1,5 (désert, badlands, savane), elle sèche lentement par ticks aléatoires. Une éponge pleine sèche en environ un jour de jeu. L'eau part aux nuages de la zone. Règle `ocwo:sponge_drying` (activée).
+- **Sauter** sur une éponge pleine fait sortir 1 niveau (jamais en dessous de 63). Un **atterrissage fort** (chute de plus de 3 blocs) fait sortir 4 niveaux (jamais en dessous de 60). L'eau sort dans la case au-dessus, puis sur les côtés. Pour une éponge étirée : 127 et 124.
+- Dans le Nether, une éponge mouillée sèche et son eau va aux nuages de la zone correspondante de l'Overworld.
 
-Elle garde son eau quand un piston la pousse ou la tire. Plus généralement, tout bloc déplacé par un piston emporte son humidité.
+### Les objets gardent leur eau
 
-Une éponge cassée, brûlée ou détruite par une explosion rend son eau autour d'elle. Elle n'a plus d'eau fixe : l'objet éponge mouillée ne transporte rien.
+- L'objet éponge garde son niveau d'eau (composant `ocwo:sponge_water`, affiché dans l'infobulle). Seuls les objets au même niveau s'empilent.
+- Une éponge **cassée** tombe avec son eau. Posée, l'éponge la retrouve.
+- Une éponge **écrasée** par un piston rend son eau et tombe sèche.
+- Une éponge étirée cassée donne un objet de 64 niveaux au plus ; le reste sort autour.
+- Une éponge compressée cassée donne deux objets, chacun avec sa moitié.
+- Au **four**, l'eau part en vapeur vers les nuages. Un seau dans la case du combustible ne se remplit que si l'éponge tenait au moins 8 niveaux ; ces 8 niveaux vont alors dans le seau.
 
-Dans le Nether, une éponge mouillée sèche et son eau s'évapore, comme en vanilla.
+### Éponge compressée (double éponge) : tient sous condition
 
-**Écrasement** : une éponge mouillée poussée par un piston contre un bloc qui ne bouge pas est écrasée. C'est le cas quand le piston ne pourrait pas pousser : bloc fixe, ou plus de 12 blocs à pousser. Une éponge sèche bloque le piston, comme en vanilla.
-- L'éponge rend toute son eau dans les cases libres autour d'elle, les plus proches d'abord, vers le bas en premier. L'eau ne va jamais dans le bloc contre lequel elle est pressée.
-- Sans place autour, l'eau passe par la tête du piston, qui peut contenir de l'eau (elle peut ensuite passer dans le corps du piston).
-- Ce qui ne trouve aucune place reste dans la case de la tête, en humidité. Il en sort plus tard, comme pour tout bloc qui ne retient plus d'eau.
-- L'éponge se casse et tombe au sol en objet éponge sèche.
+Deux éponges pressées l'une contre l'autre par un piston, sur un seul axe. Chacune rend la moitié de son eau.
+- Elle tient tant qu'il y a un **bloc solide** (ni air, ni remplaçable, ni fluide) **de chaque côté sur son axe**. Sinon, elle se sépare en deux éponges normales qui se partagent son eau. La deuxième va dans la case libérée, même si c'était la case de la tête de piston. Si les deux côtés sont libres, elle va du côté où était la tête.
+- Poussée sur un **autre axe** vers une case libre, elle s'y déplace, puis repasse ce test.
+- **Pressée de nouveau** sur son axe, elle casse : deux éponges tombent, chacune avec sa part.
+- Un piston collant qui la tire en tire une et laisse l'autre à sa place, avec ou sans bloc collant de l'autre côté.
+- Elle n'aspire rien tant qu'elle est compressée.
 
-**Double éponge** (`ocwo:compressed_sponge`) : deux éponges pressées ensemble contre un bloc qui ne bouge pas, mouillées ou non.
-- Chacune rend la moitié de son eau, en niveaux entiers ; le reste est gardé.
-- Elles deviennent un seul bloc à la place de la deuxième, et la tête du piston prend la place de la première.
-- C'est une éponge essorée : elle n'aspire rien tant qu'elle est compressée. Sa contenance de 128 niveaux sert seulement à garder ce qui reste.
-- Quand la tête du piston s'en va, elle se sépare en deux éponges, qui se partagent son eau et réaspirent normalement. L'eau déjà présente dans la case libérée va dans l'éponge posée là.
-- Cassée, elle donne deux éponges et rend son eau.
+### Éponge étirée : tient sous condition
 
-**Éponge étirée** (`ocwo:stretched_sponge`) : un piston collant sorti a une éponge devant sa tête. De l'autre côté, l'éponge est tenue par un élément collant :
-- un bloc de slime ou de miel ;
-- la tête d'un autre piston collant tournée vers elle ;
-- la face d'un piston collant rentré tourné vers elle.
+Un piston collant qui se rétracte avec une éponge devant sa tête, tenue de l'autre côté par un élément collant (slime, miel, tête ou face d'un piston collant), l'étire sur deux blocs.
+- C'est **une seule éponge** sur deux blocs, qui compte pour deux éponges partageant la même eau (128 niveaux). Elle absorbe dès qu'une seule de ses deux moitiés touche de l'eau.
+- Elle tient tant qu'un **élément collant touche chaque bout**. Sinon, elle redevient une éponge d'un bloc, dans la moitié touchée par l'élément collant qui reste. S'il n'en reste aucun, elle revient dans la case où elle était avant l'étirement. Le surplus au-delà de 64 niveaux est rejeté autour.
+- Repoussée sur son axe (par la tête du piston ou par un autre bloc), elle redevient une éponge d'un bloc, dans sa moitié la plus éloignée.
+- **Étirée de nouveau** (un piston collant la tire alors qu'elle est encore tenue de l'autre côté), elle casse : une éponge tombe.
+- **Casser une moitié casse les deux.**
 
-Quand le piston se rétracte, l'éponge ne bouge pas : elle s'étire sur deux blocs, sa case et celle de la tête. Chaque moitié contient autant qu'une éponge, donc l'éponge étirée tient deux fois plus, et elle aspire tout de suite.
+### Pistons
 
-Elle redevient une éponge :
-- quand le piston la repousse en un seul bloc (dans la case la plus éloignée du piston) ;
-- quand une moitié est détruite : l'autre moitié redevient l'éponge, et la moitié détruite ne donne pas d'objet.
+Avant qu'un piston qui s'étend ne déplace quoi que ce soit, sa ligne de poussée est lue depuis la tête ; la première règle qui s'applique est faite, puis la ligne est relue.
+1. Une éponge ne pousse **jamais un autre bloc** qu'une éponge. Elle est écrasée, ou compressée si c'est une éponge normale poussée par une autre éponge normale. Exception : le slime et le miel collés à l'éponge bougent avec elle.
+2. Une éponge poussée contre une éponge compressée ou étirée est écrasée, comme contre un bloc normal.
+3. Une éponge compressée pressée de nouveau sur son axe casse.
+4. Une éponge étirée poussée sur son axe redevient une éponge d'un bloc.
 
-Elle rejette alors le surplus autour d'elle, au-delà de 64 niveaux. Ce qui ne trouve pas de place suinte plus tard.
+**Écrasement** : l'eau sort seulement par les 4 cases sur les côtés de l'éponge (perpendiculaires à la poussée), puis continue vers les cases libres suivantes (recherche bornée à 256 cases, ordre fixe). Elle ne va jamais dans le bloc devant ni dans la tête du piston. Si l'éponge contient de l'eau et qu'aucune des 4 cases latérales n'est libre (air ou eau pas pleine), le piston ne pousse pas du tout. Une éponge sèche est écrasée quand même.
 
-**Blocs non poussables** : les deux nouveaux blocs ne peuvent pas être poussés. Ils n'existent pas en objet et n'apparaissent pas en mode serveur seul. Sans ces blocs, l'écrasement fonctionne quand même, mais pas la double éponge ni l'éponge étirée.
+Exemple de Valentin, en ligne : piston collant› / éponge / slime / étirée / étirée / ‹piston collant. Le piston de gauche pousse, et on obtient : piston sorti / tête / éponge / slime / éponge / ‹piston collant.
 
-**Textures** : les modèles reprennent les textures vanilla de l'éponge et de l'éponge mouillée, sans nouvelle image. Les versions sèche et mouillée suivent l'eau contenue.
-- Éponge étirée : la texture est étirée sur 32 pixels le long de l'axe. La moitié la plus haute montre la moitié haute de la texture, l'autre moitié le bas, et la jonction est continue.
-- Double éponge : deux textures entières sont écrasées chacune sur 8 pixels le long de l'axe.
+**Textures** : les modèles reprennent les textures vanilla de l'éponge et de l'éponge mouillée, sans nouvelle image (inchangé).
 
-Le sens suit l'axe du piston : les modèles sont tournés selon la propriété `facing`.
-
-**Tests automatiques** (`CheckSpongeGameTests`, dans les tests courants) :
-- l'éponge stocke ce qu'elle aspire ;
-- une éponge poussée garde son eau ;
-- écrasement avec place (40 niveaux rendus) et sans place (8 niveaux dans le piston, 12 en attente dans la case) ;
-- double éponge, puis séparation ;
-- éponge étirée, qui tient 128 niveaux, puis repoussée en un bloc ;
-- moitié détruite.
-
-Chaque test vérifie la conservation exacte.
+**Tests automatiques** (`CheckSpongeGameTests`, 25 tests, chacun vérifie la conservation) : absorption ; pas d'échange avec le sol ; partage entre éponges voisines ; séchage dans le désert ; saut et atterrissage ; objet qui garde son eau et la rend une fois posé ; four ; écrasement (eau par les côtés, objet sec) ; pas de place → pas de poussée ; éponge sèche écrasée ; éponge devant une pierre écrasée ; slime qui suit l'éponge ; éponge contre une compressée écrasée ; compression puis séparation ; mur retiré ; compressée pressée de nouveau ; compressée poussée de côté (tient, ou se sépare) ; éponge étirée qui absorbe par une moitié puis est repoussée ; étirée qui perd le slime, le piston, ou les deux ; étirée cassée ; étirée de nouveau ; la ligne de Valentin.
 
 ## Stabilisation (19/11/2026, branche `stabilisation`)
 

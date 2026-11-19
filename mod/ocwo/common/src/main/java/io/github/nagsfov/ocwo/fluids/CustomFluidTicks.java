@@ -287,6 +287,8 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		long d2 = debug ? System.nanoTime() : 0L;
 		profiler.popPush("block moisture");
 		moisture.tick();
+		// sponges removed without dropping an item give their water back (see SpongeLogic.onSpongeGone)
+		io.github.nagsfov.ocwo.sponge.SpongeLogic.tick(world);
 		long d3 = debug ? System.nanoTime() : 0L;
 		profiler.popPush("fluid equalization");
 		// every equalization task queued before this pass (the ones they queue are for the next tick)

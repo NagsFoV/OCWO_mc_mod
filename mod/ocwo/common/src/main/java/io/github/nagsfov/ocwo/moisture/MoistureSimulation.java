@@ -62,6 +62,11 @@ public final class MoistureSimulation {
 		return OcwoFluidGameRules.MOISTURE_SIMULATION != null && level.getGameRules().get(OcwoFluidGameRules.MOISTURE_SIMULATION);
 	}
 
+	/** Moist ground: a block that holds moisture, sponges excepted (they are buckets, see SpongeLogic). */
+	private static boolean ground(MoistureProps p, BlockState state) {
+		return p != null && p.holdsMoisture() && !io.github.nagsfov.ocwo.sponge.OcwoSponges.isAnySponge(state);
+	}
+
 	/** Still soaking: a block with its own moisture (array) that is not full. Keeps the water next to it awake. */
 	public boolean isActive(BlockPos pos) {
 		if (!level.isLoaded(pos)) return false;
@@ -228,8 +233,8 @@ public final class MoistureSimulation {
 		}
 		setUnits(pos, h);
 		activateAround(pos);
-		// a sponge (or double sponge) that went away gives its water back at once (not when a piston moves it)
-		if (gone && (io.github.nagsfov.ocwo.sponge.OcwoSponges.isSponge(oldState) || io.github.nagsfov.ocwo.sponge.OcwoSponges.isCompressed(oldState))) {
+		// a plain sponge that went away: its water goes into the item it drops, or back around it (not when a piston moves it)
+		if (gone && io.github.nagsfov.ocwo.sponge.OcwoSponges.isSponge(oldState)) {
 			io.github.nagsfov.ocwo.sponge.SpongeLogic.onSpongeGone(level, pos, h);
 		}
 	}
@@ -342,6 +347,11 @@ public final class MoistureSimulation {
 	private boolean step(BlockPos pos) {
 		BlockState state = level.getBlockState(pos);
 		if (state.is(net.minecraft.world.level.block.Blocks.MOVING_PISTON)) return false; // carried by a piston (see SpongeLogic)
+		if (io.github.nagsfov.ocwo.sponge.OcwoSponges.isAnySponge(state)) {
+			// a sponge is a bucket, not moist ground: no exchange with the ground, only its drying (SpongeLogic)
+			io.github.nagsfov.ocwo.sponge.SpongeLogic.randomTick(level, pos, state);
+			return false;
+		}
 		MoistureProps props = MoistureData.get(state);
 		int h = units(pos);
 		if (props == null || !props.holdsMoisture()) {
@@ -394,7 +404,7 @@ public final class MoistureSimulation {
 			if (!level.isLoaded(n)) continue;
 			BlockState ns = level.getBlockState(n);
 			MoistureProps np = MoistureData.get(ns);
-			if (np == null || !np.holdsMoisture()) continue;
+			if (!ground(np, ns)) continue;
 			int h2 = units(n);
 			int c2 = np.capacity();
 			if (d != Direction.DOWN && h2 >= c2) supply = true;
@@ -471,7 +481,7 @@ public final class MoistureSimulation {
 			if (isWater(fs) && !io.github.nagsfov.ocwo.fluids.WaterRest.isInert(level, n)) return false;
 			BlockState ns = level.getBlockState(n);
 			MoistureProps np = MoistureData.get(ns);
-			if (np != null && np.holdsMoisture() && units(n) != equilibrium(n, ns)) return false;
+			if (ground(np, ns) && units(n) != equilibrium(n, ns)) return false;
 		}
 		return true;
 	}
@@ -482,7 +492,7 @@ public final class MoistureSimulation {
 			if (!level.isLoaded(n)) continue;
 			BlockState ns = level.getBlockState(n);
 			MoistureProps np = MoistureData.get(ns);
-			if (np == null || !np.holdsMoisture()) continue;
+			if (!ground(np, ns)) continue;
 			if (Math.min(props.permeability(state, d), np.permeability(ns, d.getOpposite())) <= 0) continue;
 			int h2 = units(n);
 			long num = (long) h * np.capacity() - (long) h2 * props.capacity();
@@ -534,8 +544,8 @@ public final class MoistureSimulation {
 		for (Direction d : new Direction[]{Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST}) {
 			BlockPos n = o.relative(d);
 			if (!level.isLoaded(n)) continue;
-			MoistureProps np = MoistureData.get(level.getBlockState(n));
-			if (np != null && np.holdsMoisture() && units(n) > 0) return true;
+			BlockState ns = level.getBlockState(n);
+			if (ground(MoistureData.get(ns), ns) && units(n) > 0) return true;
 		}
 		return false;
 	}
@@ -556,7 +566,7 @@ public final class MoistureSimulation {
 			BlockPos c = queue.poll();
 			BlockState cs = level.getBlockState(c);
 			MoistureProps cp = MoistureData.get(cs);
-			if (cp == null || !cp.holdsMoisture()) continue;
+			if (!ground(cp, cs)) continue;
 			for (Direction d : SEEP_DIRS) {
 				BlockPos n = c.relative(d);
 				if (n.getY() > start.getY() || cp.permeability(cs, d) <= 0) continue;
@@ -568,7 +578,7 @@ public final class MoistureSimulation {
 				if (seen.contains(n.asLong()) || !level.isLoaded(n)) continue;
 				BlockState ns = level.getBlockState(n);
 				MoistureProps np = MoistureData.get(ns);
-				if (np == null || !np.holdsMoisture() || units(n) < np.capacity()) continue;
+				if (!ground(np, ns) || units(n) < np.capacity()) continue;
 				if (Math.min(cp.permeability(cs, d), np.permeability(ns, d.getOpposite())) <= 0) continue;
 				seen.add(n.asLong());
 				queue.add(n);

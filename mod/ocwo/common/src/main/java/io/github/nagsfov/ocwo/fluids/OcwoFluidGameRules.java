@@ -38,6 +38,10 @@ public class OcwoFluidGameRules {
 	public static final GameRule<Integer> RESERVOIR_MIN_BLOCKS = enabled()
 			? Services.PLATFORM.registerIntRule("reservoir_min_blocks", 8, 0, 1_000_000) : null;
 
+	/** Sponges dry slowly in the open in hot, dry biomes (to the clouds). */
+	public static final GameRule<Boolean> SPONGE_DRYING = enabled()
+			? Services.PLATFORM.registerBooleanRule("sponge_drying", true) : null;
+
 	/** TEST ONLY, NOT CONSERVATIVE: vanilla rain adds moisture to the top blocks (no clouds yet). */
 	public static final GameRule<Boolean> RAIN_MOISTURE_TEST = enabled()
 			? Services.PLATFORM.registerBooleanRule("rain_moisture_test", false) : null;

@@ -16,23 +16,25 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * One half of a stretched sponge: a sponge pulled by a sticky piston while held by a sticky element on the other
- * side. {@link #FACING} points to the other half. Each half holds as much as a sponge, so the stretched sponge holds
- * twice as much, and absorbs water. When it becomes one block again (pushed back by the piston) or one half is
- * destroyed, it is a plain sponge again and gives back what it holds over a sponge's capacity.
+ * side. {@link #FACING} points to the other half; {@link #ORIGIN} marks the half where the sponge was before it was
+ * stretched. The two halves are one sponge that counts as two sharing their water (128 levels): it absorbs as soon
+ * as one half touches water. It holds only while a sticky element touches each end (see SpongeLogic); broken, both
+ * halves break.
  */
 public class StretchedSpongeBlock extends Block {
 
 	public static final EnumProperty<Direction> FACING = BlockStateProperties.FACING;
 	public static final BooleanProperty WET = BooleanProperty.create("wet");
+	public static final BooleanProperty ORIGIN = BooleanProperty.create("origin");
 
 	public StretchedSpongeBlock(BlockBehaviour.Properties properties) {
 		super(properties);
-		registerDefaultState(stateDefinition.any().setValue(FACING, Direction.UP).setValue(WET, false));
+		registerDefaultState(stateDefinition.any().setValue(FACING, Direction.UP).setValue(WET, false).setValue(ORIGIN, false));
 	}
 
 	@Override
 	protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-		builder.add(FACING, WET);
+		builder.add(FACING, WET, ORIGIN);
 	}
 
 	@Override
@@ -42,13 +44,15 @@ public class StretchedSpongeBlock extends Block {
 
 	@Override
 	protected void neighborChanged(BlockState state, Level level, BlockPos pos, Block block, @Nullable Orientation orientation, boolean movedByPiston) {
-		if (level instanceof ServerLevel sl) SpongeLogic.absorb(sl, pos);
+		if (level instanceof ServerLevel sl && !SpongeLogic.isQuiet()) {
+			if (!SpongeLogic.checkStretched(sl, pos)) SpongeLogic.absorb(sl, pos);
+		}
 		super.neighborChanged(state, level, pos, block, orientation, movedByPiston);
 	}
 
 	@Override
 	protected void affectNeighborsAfterRemoval(BlockState state, ServerLevel level, BlockPos pos, boolean movedByPiston) {
-		SpongeLogic.onStretchedRemoved(level, pos, state);
+		if (!movedByPiston) SpongeLogic.onStretchedRemoved(level, pos, state);
 		super.affectNeighborsAfterRemoval(state, level, pos, movedByPiston);
 	}
 }

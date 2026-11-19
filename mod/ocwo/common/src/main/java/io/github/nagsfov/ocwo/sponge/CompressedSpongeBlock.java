@@ -15,10 +15,11 @@ import net.minecraft.world.level.redstone.Orientation;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Double sponge: two sponges pressed together by a piston (each gave back half its water). A wrung sponge: it
- * absorbs nothing while compressed. {@link #FACING} points to the piston head; when the head is gone, it splits back
- * into two sponges (the second one where the head was), which absorb again. Mined, it drops two sponges and gives
- * back its water.
+ * Double sponge: two sponges pressed together by a piston along one axis (each gave back half its water). A wrung
+ * sponge: it absorbs nothing while compressed. {@link #FACING} points to the side where the piston head was. It holds
+ * only while a solid block touches each side along its axis; otherwise it splits back into two sponges (see
+ * SpongeLogic). Pushed across its axis, it moves; pressed again along it, it breaks. Broken, it drops two sponges,
+ * each with its half of the water.
  */
 public class CompressedSpongeBlock extends Block {
 
@@ -36,8 +37,19 @@ public class CompressedSpongeBlock extends Block {
 	}
 
 	@Override
+	protected void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean movedByPiston) {
+		if (!oldState.is(state.getBlock()) && level instanceof ServerLevel sl && !SpongeLogic.isQuiet()) SpongeLogic.checkCompressed(sl, pos);
+	}
+
+	@Override
 	protected void neighborChanged(BlockState state, Level level, BlockPos pos, Block block, @Nullable Orientation orientation, boolean movedByPiston) {
-		if (level instanceof ServerLevel sl) SpongeLogic.trySplit(sl, pos, state);
+		if (level instanceof ServerLevel sl && !SpongeLogic.isQuiet()) SpongeLogic.checkCompressed(sl, pos);
 		super.neighborChanged(state, level, pos, block, orientation, movedByPiston);
+	}
+
+	@Override
+	protected void affectNeighborsAfterRemoval(BlockState state, ServerLevel level, BlockPos pos, boolean movedByPiston) {
+		if (!movedByPiston) SpongeLogic.onCompressedRemoved(level, pos);
+		super.affectNeighborsAfterRemoval(state, level, pos, movedByPiston);
 	}
 }

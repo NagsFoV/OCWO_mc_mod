@@ -4,13 +4,17 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
 import io.github.nagsfov.ocwo.fluids.FluidUtils;
+import io.github.nagsfov.ocwo.sponge.CompressedSpongeBlock;
+import io.github.nagsfov.ocwo.sponge.OcwoSponges;
 import io.github.nagsfov.ocwo.sponge.SpongeLogic;
+import io.github.nagsfov.ocwo.sponge.SpongePistons;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
 import net.minecraft.world.level.block.piston.PistonStructureResolver;
+import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -26,24 +30,35 @@ public class PistonBaseBlockMixin {
 	@Final
 	private boolean isSticky;
 
-	/** OCWO sponges: a piston that cannot push presses a sponge instead (see SpongeLogic). */
+	/**
+	 * OCWO sponges: before an extending piston moves anything, the sponge rules of its push line (SpongePistons); it
+	 * does not push when one cannot be carried out.
+	 */
 	@Inject(method = "moveBlocks", at = @At("HEAD"), cancellable = true)
-	void ocwoPressSponge(Level level, BlockPos pistonPos, Direction direction, boolean extending, CallbackInfoReturnable<Boolean> cir) {
+	void ocwoSpongeRules(Level level, BlockPos pistonPos, Direction direction, boolean extending, CallbackInfoReturnable<Boolean> cir) {
 		if (level.isClientSide()) return;
 		if (extending) {
-			if (SpongeLogic.tryPress((ServerLevel) level, pistonPos, direction, isSticky)) cir.setReturnValue(true);
+			if (!SpongePistons.beforeExtend((ServerLevel) level, pistonPos, direction)) cir.setReturnValue(false);
 		} else {
 			SpongeLogic.saveHeadWater((ServerLevel) level, pistonPos, direction);
 		}
 	}
 
-	/** OCWO sponges: the piston gets its extension event when it will press a sponge. */
+	/** OCWO sponges: the piston gets its extension event when a sponge rule lets it extend. */
 	@WrapOperation(method = "checkIfExtend", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/world/level/block/piston/PistonStructureResolver;resolve()Z"))
 	boolean ocwoCanPress(PistonStructureResolver resolver, Operation<Boolean> original,
 	                      @Local(argsOnly = true) Level level, @Local(argsOnly = true) BlockPos pos, @Local Direction direction) {
 		if (original.call(resolver)) return true;
-		return !level.isClientSide() && SpongeLogic.canPress((ServerLevel) level, pos, direction);
+		return !level.isClientSide() && SpongePistons.couldExtend((ServerLevel) level, pos, direction);
+	}
+
+	/** OCWO sponges: a retracting sticky piston would stretch a stretched sponge again: it breaks. */
+	@Inject(method = "triggerEvent", at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/world/level/Level;getRandom()Lnet/minecraft/util/RandomSource;", ordinal = 0))
+	void ocwoRestretch(BlockState state, Level level, BlockPos pos, int b0, int b1, CallbackInfoReturnable<Boolean> cir) {
+		if (level.isClientSide() || !isSticky || (b0 != 1 && b0 != 2)) return;
+		SpongePistons.beforeRetract((ServerLevel) level, pos, state.getValue(PistonBaseBlock.FACING));
 	}
 
 	/** OCWO sponges: a sticky piston pulling a sponge held on the other side stretches it. */
@@ -53,6 +68,13 @@ public class PistonBaseBlockMixin {
 	boolean ocwoStretchSponge(PistonBaseBlock self, Level level, BlockPos pos, Direction direction, boolean extending, Operation<Boolean> original) {
 		if (!level.isClientSide() && SpongeLogic.tryStretch((ServerLevel) level, pos, direction)) return true;
 		return original.call(self, level, pos, direction, extending);
+	}
+
+	/** OCWO sponges: a double sponge moves only across its axis (along it, a piston presses it again: SpongePistons). */
+	@Inject(method = "isPushable", at = @At("HEAD"), cancellable = true)
+	private static void ocwoDoubleSpongeAxis(BlockState state, Level level, BlockPos pos, Direction direction, boolean allowDestroyable,
+	                                         Direction connectionDirection, CallbackInfoReturnable<Boolean> cir) {
+		if (OcwoSponges.isCompressed(state) && state.getValue(CompressedSpongeBlock.FACING).getAxis() == direction.getAxis()) cir.setReturnValue(false);
 	}
 
 	@Inject(method = "moveBlocks", at = @At(value = "INVOKE",

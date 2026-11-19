@@ -2,23 +2,26 @@ package io.github.nagsfov.ocwo.sponge;
 
 import io.github.nagsfov.ocwo.fluids.CustomFluidTicks;
 import io.github.nagsfov.ocwo.fluids.FluidUtils;
+import io.github.nagsfov.ocwo.fluids.OcwoFluidGameRules;
+import io.github.nagsfov.ocwo.fluids.WaterReserves;
 import io.github.nagsfov.ocwo.moisture.Moisture;
 import io.github.nagsfov.ocwo.moisture.MoistureData;
 import io.github.nagsfov.ocwo.moisture.MoistureProps;
 import io.github.nagsfov.ocwo.moisture.MoistureSimulation;
+import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.attribute.EnvironmentAttributes;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
 import net.minecraft.world.level.block.piston.PistonHeadBlock;
-import net.minecraft.world.level.block.piston.PistonStructureResolver;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.PistonType;
 import net.minecraft.world.level.material.FlowingFluid;
@@ -29,56 +32,66 @@ import net.minecraft.world.phys.shapes.Shapes;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
 
 /**
- * OCWO sponges (03-humidite-et-etats-des-blocs.md, "Éponges"). A sponge stores the water it absorbs as moisture of
- * its cell (nothing is destroyed as in vanilla); water is conserved exactly everywhere (1 level = 16 units).
+ * OCWO sponges (03-humidite-et-etats-des-blocs.md, "Éponges"). Valentin's rules of 18 and 19/11/2026; the adjustable
+ * choices are in {@link SpongeRules}. Water is conserved exactly everywhere (1 level = 16 units).
  * <ul>
- *   <li>absorption: at once when placed or when a neighbour changes, through connected water up to 6 blocks away,
- *   up to its capacity (64 levels);</li>
- *   <li>crushing: a wet sponge pushed by a piston against a block that does not move gives back all its water in
- *   the free cells around it (never into that block), then through the piston head (it holds water); the sponge
- *   breaks and drops as a (dry) sponge item;</li>
- *   <li>double sponge: two sponges pressed together each give back half their water and become one compressed
- *   block, which splits back into two sponges when the piston head goes away;</li>
- *   <li>stretched sponge: a sponge held by a sticky element on the other side, pulled by a sticky piston, stretches
- *   into two blocks that hold twice as much; pushed back, or with one half destroyed, it is one sponge again and
- *   gives back the surplus.</li>
+ *   <li><b>A sponge is a bucket</b>: it holds 0 to 64 levels (128 for a stretched sponge, the two halves sharing them),
+ *   stored in its cell(s); it exchanges water only with water blocks (absorption at once when placed or when a
+ *   neighbour changes, through connected water up to 6 blocks away), never with moist ground. Adjacent sponges share
+ *   their water evenly. It dries slowly in the open in hot, dry biomes (to the clouds).</li>
+ *   <li><b>Items</b>: a sponge item carries its water (component {@code ocwo:sponge_water}); a broken sponge drops with
+ *   it, a crushed one gives it back and drops dry; placed, the sponge gets it back.</li>
+ *   <li><b>Stretched sponge</b> (two blocks): holds while a sticky element touches each end; otherwise it is one
+ *   sponge again, in the half still held (none: where it was before), giving back what is over 64 levels. Breaking
+ *   one half breaks both.</li>
+ *   <li><b>Double sponge</b>: holds while a solid block touches each side along its axis; otherwise it splits into
+ *   two sponges (the second in the freed cell; both free: on the side the piston head was).</li>
+ *   <li>Pistons: see {@link SpongePistons}.</li>
+ *   <li>Jumping on a full sponge squeezes 1 level out, a hard landing 4 (into the cell above, then beside).</li>
  * </ul>
- * Whatever finds no room stays as moisture of the cell, released later by the moisture simulation (never lost).
  */
 public final class SpongeLogic {
 
 	private static final int U = Moisture.UNITS_PER_LEVEL;
-	public static final int SPONGE_LEVELS = 64;
+	public static final int SPONGE_LEVELS = SpongeRules.SPONGE_LEVELS;
 	private static final int ABSORB_DEPTH = 6;
 	private static final int ABSORB_CELLS = 64;
-	private static final int RELEASE_STEPS = 256;
 	/** Fixed order: water goes down first, then sideways (deterministic, like the rest of the flow). */
-	private static final Direction[] ORDER = {Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST, Direction.UP};
+	static final Direction[] ORDER = {Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST, Direction.UP};
 
-	/** true while this class changes blocks itself (no removal reaction, no moisture accounting). */
+	/** true while this class changes blocks itself (no removal reaction, no moisture accounting, no checks). */
 	private static boolean quiet;
-	private static boolean absorbing;
+	private static boolean absorbing, equalizing;
+	/** Plain sponges removed and not dropped yet, per level: pos -> game time of the removal. */
+	private static final Map<ServerLevel, Long2LongOpenHashMap> PENDING = new WeakHashMap<>();
 
 	private SpongeLogic() {
 	}
 
-	private static MoistureSimulation sim(ServerLevel level) {
+	public static boolean isQuiet() {
+		return quiet;
+	}
+
+	static MoistureSimulation sim(ServerLevel level) {
 		return CustomFluidTicks.get(level).moisture();
 	}
 
+	/** Capacity of one cell, in units. */
 	public static int capacity(BlockState state) {
 		MoistureProps p = MoistureData.get(state);
 		return p != null && p.holdsMoisture() ? p.capacity() : SPONGE_LEVELS * U;
 	}
 
-	private static boolean isWater(FluidState fs) {
+	static boolean isWater(FluidState fs) {
 		return !fs.isEmpty() && fs.getType().isSame(Fluids.WATER);
 	}
 
-	/** Sets a block without moisture accounting and without the sponges' own removal reactions. */
+	/** Sets a block without moisture accounting and without the sponges' own reactions. */
 	static void set(ServerLevel level, BlockPos pos, BlockState state, int flags) {
 		boolean was = quiet;
 		quiet = true;
@@ -89,16 +102,67 @@ public final class SpongeLogic {
 		}
 	}
 
-	// ------------------------------------------------------------------ absorption and look
+	static int units(ServerLevel level, BlockPos pos) {
+		return sim(level).units(pos);
+	}
 
-	/** Absorbs at once the water around a sponge (plain or stretched), up to its capacity. */
+	static void setUnits(ServerLevel level, BlockPos pos, int units) {
+		sim(level).setUnits(pos, units);
+	}
+
+	// ------------------------------------------------------------------ a sponge as a bucket
+
+	/** The other half of a stretched sponge (null if this half has lost it). */
+	static BlockPos otherHalf(ServerLevel level, BlockPos pos, BlockState state) {
+		if (!OcwoSponges.isStretched(state)) return null;
+		Direction f = state.getValue(StretchedSpongeBlock.FACING);
+		BlockPos other = pos.relative(f);
+		BlockState os = level.getBlockState(other);
+		return OcwoSponges.isStretched(os) && os.getValue(StretchedSpongeBlock.FACING) == f.getOpposite() ? other : null;
+	}
+
+	/** The cells of the sponge at pos: one, or both halves of a stretched sponge. */
+	static List<BlockPos> cells(ServerLevel level, BlockPos pos, BlockState state) {
+		BlockPos other = otherHalf(level, pos, state);
+		return other == null ? List.of(pos) : List.of(pos, other);
+	}
+
+	/** Water of the sponge at pos (both halves of a stretched sponge), in units. */
+	public static int poolUnits(ServerLevel level, BlockPos pos) {
+		int sum = 0;
+		for (BlockPos c : cells(level, pos, level.getBlockState(pos))) sum += units(level, c);
+		return sum;
+	}
+
+	/** Capacity of the sponge at pos (128 levels for a stretched one), in units. */
+	public static int poolCapacity(ServerLevel level, BlockPos pos) {
+		BlockState state = level.getBlockState(pos);
+		return cells(level, pos, state).size() * capacity(state);
+	}
+
+	/** Sets the water of the sponge at pos (a stretched sponge shares it between its halves, in whole levels). */
+	static void setPool(ServerLevel level, BlockPos pos, int total) {
+		BlockState state = level.getBlockState(pos);
+		List<BlockPos> c = cells(level, pos, state);
+		if (c.size() == 1) {
+			setUnits(level, pos, total);
+			return;
+		}
+		// the half where the sponge was gets the odd level and the fraction
+		boolean first = state.getValue(StretchedSpongeBlock.ORIGIN);
+		int half = (total / U / 2) * U;
+		setUnits(level, first ? c.get(1) : c.get(0), half);
+		setUnits(level, first ? c.get(0) : c.get(1), total - half);
+	}
+
+	/** Absorbs at once the water around a sponge (plain or stretched: around both halves), up to its capacity. */
 	public static void absorb(ServerLevel level, BlockPos pos) {
-		if (absorbing) return;
+		if (absorbing || quiet) return;
 		BlockState state = level.getBlockState(pos);
 		if (!OcwoSponges.isSponge(state) && !OcwoSponges.isStretched(state)) return;
-		MoistureSimulation sim = sim(level);
-		int u = sim.units(pos);
-		int room = (capacity(state) - u) / U;
+		List<BlockPos> origins = cells(level, pos, state);
+		int pool = poolUnits(level, pos);
+		int room = (poolCapacity(level, pos) - pool) / U;
 		int taken = 0;
 		if (room > 0) {
 			absorbing = true;
@@ -106,10 +170,12 @@ public final class SpongeLogic {
 				ArrayDeque<BlockPos> queue = new ArrayDeque<>();
 				ArrayDeque<Integer> depth = new ArrayDeque<>();
 				LongOpenHashSet seen = new LongOpenHashSet();
-				seen.add(pos.asLong());
-				queue.add(pos);
-				depth.add(0);
-				int cells = 0;
+				for (BlockPos o : origins) {
+					seen.add(o.asLong());
+					queue.add(o);
+					depth.add(0);
+				}
+				int cellsSeen = 0;
 				search:
 				while (!queue.isEmpty()) {
 					BlockPos cur = queue.poll();
@@ -120,7 +186,7 @@ public final class SpongeLogic {
 						if (!seen.add(n.asLong()) || !level.isLoaded(n)) continue;
 						FluidState fs = level.getFluidState(n);
 						if (!isWater(fs) || !MoistureSimulation.canTakeWaterFrom(level.getBlockState(n))) continue;
-						if (++cells > ABSORB_CELLS) break search;
+						if (++cellsSeen > ABSORB_CELLS) break search;
 						int take = Math.min(fs.getAmount(), room - taken);
 						if (take > 0 && fs.getType() instanceof FlowingFluid ff) {
 							FluidUtils.setFluid(level, n, ff, fs.getAmount() - take, false);
@@ -136,38 +202,187 @@ public final class SpongeLogic {
 			}
 		}
 		if (taken > 0) {
-			sim.setUnits(pos, u + taken * U);
+			setPool(level, pos, pool + taken * U);
 			level.playSound(null, pos, SoundEvents.SPONGE_ABSORB, SoundSource.BLOCKS, 1.0F, 1.0F);
 		}
 		updateLook(level, pos);
+		equalize(level, pos);
 	}
 
-	/** Wet look as soon as the block holds one water level. */
+	/** Wet look as soon as the sponge holds one water level (both halves of a stretched sponge alike). */
 	public static void updateLook(ServerLevel level, BlockPos pos) {
-		BlockState state = level.getBlockState(pos);
-		boolean wet = sim(level).units(pos) >= U;
-		BlockState want = state;
-		if (OcwoSponges.isSponge(state)) {
-			want = (wet ? Blocks.WET_SPONGE : Blocks.SPONGE).defaultBlockState();
-		} else if (OcwoSponges.isStretched(state)) {
-			want = state.setValue(StretchedSpongeBlock.WET, wet);
-		} else if (OcwoSponges.isCompressed(state)) {
-			want = state.setValue(CompressedSpongeBlock.WET, wet);
+		BlockState s0 = level.getBlockState(pos);
+		boolean wet = poolUnits(level, pos) >= U;
+		for (BlockPos c : cells(level, pos, s0)) {
+			BlockState state = level.getBlockState(c);
+			BlockState want = state;
+			if (OcwoSponges.isSponge(state)) {
+				want = (wet ? Blocks.WET_SPONGE : Blocks.SPONGE).defaultBlockState();
+			} else if (OcwoSponges.isStretched(state)) {
+				want = state.setValue(StretchedSpongeBlock.WET, wet);
+			} else if (OcwoSponges.isCompressed(state)) {
+				want = state.setValue(CompressedSpongeBlock.WET, units(level, c) >= U);
+			}
+			if (want != state) set(level, c, want, Block.UPDATE_ALL);
 		}
-		if (want != state) set(level, pos, want, Block.UPDATE_ALL);
 	}
 
 	/** Wet sponge placed where water evaporates (Nether): its water evaporates, as in vanilla. */
 	public static void evaporate(ServerLevel level, BlockPos pos) {
 		// the water goes up (Nether: to the clouds of the matching Overworld zone, see WaterReserves.toClouds)
-		io.github.nagsfov.ocwo.fluids.WaterReserves.toClouds(level, pos, sim(level).units(pos));
-		sim(level).setUnits(pos, 0);
+		WaterReserves.toClouds(level, pos, units(level, pos));
+		setUnits(level, pos, 0);
 		set(level, pos, Blocks.SPONGE.defaultBlockState(), Block.UPDATE_ALL);
 		level.levelEvent(2009, pos, 0);
 		level.playSound(null, pos, SoundEvents.WET_SPONGE_DRIES, SoundSource.BLOCKS, 1.0F, (1.0F + level.getRandom().nextFloat() * 0.2F) * 0.7F);
 	}
 
+	// ------------------------------------------------------------------ sponges side by side share their water
+
+	/**
+	 * The sponges touching each other (plain or stretched, not compressed; at most {@link SpongeRules#GROUP_MAX}) share
+	 * their water in proportion to their capacity, like communicating vessels: whole levels, the extra levels going one
+	 * by one to the sponges nearest to origin (breadth first, fixed order), the fraction of a level to origin.
+	 */
+	public static void equalize(ServerLevel level, BlockPos origin) {
+		if (!SpongeRules.EQUALIZE || quiet || equalizing) return;
+		BlockState os = level.getBlockState(origin);
+		if (!OcwoSponges.isSponge(os) && !OcwoSponges.isStretched(os)) return;
+		List<List<BlockPos>> members = new ArrayList<>();
+		LongOpenHashSet seen = new LongOpenHashSet();
+		ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+		List<BlockPos> first = cells(level, origin, os);
+		members.add(first);
+		for (BlockPos c : first) {
+			seen.add(c.asLong());
+			queue.add(c);
+		}
+		while (!queue.isEmpty() && members.size() < SpongeRules.GROUP_MAX) {
+			BlockPos cur = queue.poll();
+			for (Direction d : ORDER) {
+				BlockPos n = cur.relative(d);
+				if (seen.contains(n.asLong()) || !level.isLoaded(n)) continue;
+				BlockState ns = level.getBlockState(n);
+				if (!OcwoSponges.isSponge(ns) && !OcwoSponges.isStretched(ns)) continue;
+				List<BlockPos> m = cells(level, n, ns);
+				for (BlockPos c : m) {
+					seen.add(c.asLong());
+					queue.add(c);
+				}
+				members.add(m);
+				if (members.size() >= SpongeRules.GROUP_MAX) break;
+			}
+		}
+		if (members.size() < 2) return;
+		int n = members.size();
+		long total = 0, capTotal = 0;
+		long[] cap = new long[n];
+		for (int i = 0; i < n; i++) {
+			for (BlockPos c : members.get(i)) {
+				total += units(level, c);
+				cap[i] += capacity(level.getBlockState(c));
+			}
+			capTotal += cap[i];
+		}
+		long levels = total / U, fraction = total % U;
+		long[] share = new long[n];
+		long given = 0;
+		for (int i = 0; i < n; i++) {
+			share[i] = levels * cap[i] / capTotal;
+			given += share[i];
+		}
+		for (int i = 0; given < levels; i = (i + 1) % n) {
+			share[i]++;
+			given++;
+		}
+		boolean changed = false;
+		long[] want = new long[n];
+		for (int i = 0; i < n; i++) {
+			want[i] = share[i] * U + (i == 0 ? fraction : 0);
+			long now = 0;
+			for (BlockPos c : members.get(i)) now += units(level, c);
+			if (now != want[i]) changed = true;
+		}
+		if (!changed) return;
+		equalizing = true;
+		try {
+			for (int i = 0; i < n; i++) {
+				setPool(level, members.get(i).get(0), (int) want[i]);
+				updateLook(level, members.get(i).get(0));
+			}
+		} finally {
+			equalizing = false;
+		}
+	}
+
+	// ------------------------------------------------------------------ drying (random ticks of the moisture simulation)
+
+	/**
+	 * Random tick of a sponge cell: in the open, in a biome without precipitation and at least
+	 * {@link SpongeRules#DRYING_MIN_TEMPERATURE} of base temperature, it dries slowly (to the clouds); a full sponge
+	 * dries in about {@link SpongeRules#DRYING_TICKS_FOR_FULL} ticks whatever {@code ocwo:moisture_random_ticks} is.
+	 */
+	public static void randomTick(ServerLevel level, BlockPos pos, BlockState state) {
+		if (OcwoFluidGameRules.SPONGE_DRYING != null && !level.getGameRules().get(OcwoFluidGameRules.SPONGE_DRYING)) return;
+		int u = units(level, pos);
+		if (u < U) return;
+		var biome = level.getBiome(pos).value();
+		if (biome.hasPrecipitation() || biome.getBaseTemperature() < SpongeRules.DRYING_MIN_TEMPERATURE) return;
+		if (SpongeRules.DRYING_NEEDS_SKY && !level.canSeeSky(pos.above())) return;
+		int n = OcwoFluidGameRules.MOISTURE_RANDOM_TICKS == null ? 3 : level.getGameRules().get(OcwoFluidGameRules.MOISTURE_RANDOM_TICKS);
+		if (n <= 0) return;
+		// a cell is drawn n times out of 4096 per tick: SPONGE_LEVELS levels in DRYING_TICKS_FOR_FULL ticks
+		int perStep = (int) Math.max(1, Math.ceil(SPONGE_LEVELS * 4096.0 / ((double) SpongeRules.DRYING_TICKS_FOR_FULL * n)));
+		int take = Math.min(perStep, u / U);
+		setUnits(level, pos, u - take * U);
+		WaterReserves.toClouds(level, pos, (long) take * U);
+		if (OcwoSponges.isStretched(state)) setPool(level, pos, poolUnits(level, pos));
+		updateLook(level, pos);
+		equalize(level, pos);
+	}
+
 	// ------------------------------------------------------------------ giving water back
+
+	/** A cell where water can go: air, or water that is not full (and not falling). */
+	static boolean free(ServerLevel level, BlockPos p) {
+		if (!level.isLoaded(p)) return false;
+		BlockState s = level.getBlockState(p);
+		FluidState fs = level.getFluidState(p);
+		if (isWater(fs)) return fs.getAmount() < FluidUtils.MAX_LEVEL && !FluidUtils.isFalling(fs) && (s.getBlock() instanceof LiquidBlock || s.isAir());
+		return fs.isEmpty() && s.isAir();
+	}
+
+	/**
+	 * Gives {@code levels} water levels back, first into the start cells themselves (in order), then into the free cells
+	 * reachable from them through free cells (breadth first, fixed order, at most {@link SpongeRules#RELEASE_CELLS}
+	 * cells), never into the blocked cells. {@code dryRun}: changes nothing. Returns what found no room.
+	 */
+	static int releaseFrom(ServerLevel level, List<BlockPos> starts, int levels, Set<BlockPos> blocked, boolean dryRun) {
+		if (levels <= 0) return 0;
+		LongOpenHashSet visited = new LongOpenHashSet();
+		for (BlockPos b : blocked) visited.add(b.asLong());
+		ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+		for (BlockPos s : starts) {
+			if (visited.add(s.asLong()) && free(level, s)) queue.add(s);
+		}
+		int cells = 0;
+		while (!queue.isEmpty() && levels > 0 && cells++ < SpongeRules.RELEASE_CELLS) {
+			BlockPos cur = queue.poll();
+			FluidState fs = level.getFluidState(cur);
+			int have = isWater(fs) ? fs.getAmount() : 0;
+			int put = Math.min(levels, FluidUtils.MAX_LEVEL - have);
+			if (put > 0) {
+				if (!dryRun) FluidUtils.setFluid(level, cur, Fluids.WATER, have + put, false);
+				levels -= put;
+			}
+			for (Direction d : ORDER) {
+				BlockPos n = cur.relative(d);
+				if (!visited.add(n.asLong())) continue;
+				if (free(level, n)) queue.add(n);
+			}
+		}
+		return levels;
+	}
 
 	/**
 	 * Places {@code levels} water levels in the free cells reachable from the origins (nearest first, at most 8 per
@@ -183,7 +398,7 @@ public final class SpongeLogic {
 		}
 		for (BlockPos b : blocked) visited.add(b.asLong());
 		int steps = 0;
-		while (!queue.isEmpty() && levels > 0 && steps++ < RELEASE_STEPS) {
+		while (!queue.isEmpty() && levels > 0 && steps++ < SpongeRules.RELEASE_CELLS) {
 			BlockPos cur = queue.poll();
 			boolean origin = origins.contains(cur);
 			for (Direction dir : ORDER) {
@@ -212,157 +427,255 @@ public final class SpongeLogic {
 		return levels;
 	}
 
-	/** Puts water into the cell itself (the piston head holds water). Returns what did not fit. */
-	private static int intoCell(ServerLevel level, BlockPos pos, int levels) {
-		if (levels <= 0) return 0;
-		FluidState fs = level.getFluidState(pos);
-		if (!fs.isEmpty() && !isWater(fs)) return levels;
-		if (!FluidUtils.isFluidStateOverrided(level.getBlockState(pos))) return levels;
-		int have = isWater(fs) ? fs.getAmount() : 0;
-		int put = Math.min(levels, FluidUtils.MAX_LEVEL - have);
-		if (put <= 0) return levels;
-		FluidUtils.setFluid(level, pos, Fluids.WATER, have + put, false);
-		return levels - put;
-	}
-
-	/** A sponge holding more than its capacity gives the surplus back around it (what finds no room seeps later). */
-	private static void releaseSurplus(ServerLevel level, BlockPos pos, Set<BlockPos> blocked) {
-		MoistureSimulation sim = sim(level);
-		int u = sim.units(pos);
-		int over = u - capacity(level.getBlockState(pos));
+	/** A sponge holding more than its capacity gives the surplus back around it (what finds no room stays in it). */
+	static void releaseSurplus(ServerLevel level, BlockPos pos, Set<BlockPos> blocked) {
+		int u = poolUnits(level, pos);
+		int over = u - poolCapacity(level, pos);
 		if (over <= 0) return;
-		int levels = Math.min(u / U, (over + U - 1) / U);
-		int left = release(level, List.of(pos), levels, blocked);
-		sim.setUnits(pos, u - (levels - left) * U);
+		int levels = (over + U - 1) / U;
+		int left = release(level, cells(level, pos, level.getBlockState(pos)), levels, blocked);
+		setPool(level, pos, u - (levels - left) * U);
 	}
 
-	/** A sponge block went away (mined, burnt, exploded…): its water comes back around its cell at once. */
-	public static void onSpongeGone(ServerLevel level, BlockPos pos, int units) {
-		if (quiet || units < U) return;
-		MoistureSimulation sim = sim(level);
+	/** Gives units back around pos at once (what finds no room stays in the cell, released later). */
+	static void giveBack(ServerLevel level, BlockPos pos, int units) {
 		int levels = units / U;
 		int left = release(level, List.of(pos), levels, Set.of());
-		left = intoCell(level, pos, left);
-		sim.setUnits(pos, units - (levels - left) * U);
+		setUnits(level, pos, units - (levels - left) * U);
 	}
 
-	// ------------------------------------------------------------------ pistons
+	// ------------------------------------------------------------------ removal and items
 
-	private static boolean isStickyAnchor(BlockState s, Direction pull) {
+	/**
+	 * A plain sponge went away (mined, burnt, exploded…, not moved by a piston): its water goes into the item it drops
+	 * ({@link #onDrop}); if it drops none (creative mode, explosion), the water comes back around its cell at the end
+	 * of the tick ({@link #tick}).
+	 */
+	public static void onSpongeGone(ServerLevel level, BlockPos pos, int units) {
+		if (quiet || units < U) return;
+		if (OcwoSponges.SPONGE_WATER == null) {
+			giveBack(level, pos, units);
+			return;
+		}
+		PENDING.computeIfAbsent(level, k -> new Long2LongOpenHashMap()).put(pos.asLong(), level.getGameTime());
+	}
+
+	/** A block drops an item at pos (Block.popResource): a plain sponge's drop takes the water of the removed sponge. */
+	public static ItemStack onDrop(ServerLevel level, BlockPos pos, ItemStack stack) {
+		if (!OcwoSponges.isSpongeItem(stack) || OcwoSponges.SPONGE_WATER == null || stack.has(OcwoSponges.SPONGE_WATER)) return stack;
+		Long2LongOpenHashMap pending = PENDING.get(level);
+		if (pending != null && pending.containsKey(pos.asLong())) {
+			pending.remove(pos.asLong()); // removed first, then dropped (a player breaking it)
+		} else if (!OcwoSponges.isSponge(level.getBlockState(pos))) {
+			return stack;
+		} // else: dropped first, then removed (Level.destroyBlock, explosions): the sponge is still there
+		int u = units(level, pos);
+		int levels = Math.min(u / U, SPONGE_LEVELS);
+		if (levels <= 0) return stack;
+		setUnits(level, pos, u - levels * U);
+		return OcwoSponges.spongeItem(levels, stack.getCount());
+	}
+
+	/** End of each level tick: the water of the sponges that dropped no item comes back around their cells. */
+	public static void tick(ServerLevel level) {
+		Long2LongOpenHashMap pending = PENDING.get(level);
+		if (pending == null || pending.isEmpty()) return;
+		long now = level.getGameTime();
+		var it = pending.long2LongEntrySet().fastIterator();
+		List<BlockPos> due = new ArrayList<>();
+		while (it.hasNext()) {
+			var e = it.next();
+			if (e.getLongValue() < now) {
+				due.add(BlockPos.of(e.getLongKey()));
+				it.remove();
+			}
+		}
+		for (BlockPos p : due) {
+			BlockState s = level.getBlockState(p);
+			if (OcwoSponges.isAnySponge(s)) continue; // a sponge is there again: its water is its own
+			int u = units(level, p);
+			if (u >= U) giveBack(level, p, u);
+		}
+	}
+
+	/** Drops a sponge item holding {@code levels} levels (without the item component: gives them back around). */
+	static void dropSponge(ServerLevel level, BlockPos pos, int levels) {
+		if (levels > 0 && OcwoSponges.SPONGE_WATER == null) {
+			int left = release(level, List.of(pos), levels, Set.of());
+			setUnits(level, pos, units(level, pos) + left * U);
+			levels = 0;
+		}
+		Block.popResource(level, pos, OcwoSponges.spongeItem(levels, 1));
+	}
+
+	/** A sponge was placed from an item: it gets the item's water back (Block.setPlacedBy). */
+	public static void onPlaced(ServerLevel level, BlockPos pos, BlockState state, ItemStack stack) {
+		if (!OcwoSponges.isSponge(state)) return;
+		int levels = OcwoSponges.itemLevels(stack);
+		if (levels <= 0) return;
+		if (level.environmentAttributes().getValue(EnvironmentAttributes.WATER_EVAPORATES, pos)) {
+			WaterReserves.toClouds(level, pos, (long) levels * U); // the Nether: it dries at once
+			return;
+		}
+		setUnits(level, pos, units(level, pos) + levels * U);
+		updateLook(level, pos);
+		releaseSurplus(level, pos, Set.of());
+		equalize(level, pos);
+	}
+
+	// ------------------------------------------------------------------ stretched sponge: held at both ends
+
+	/** A sticky element at p facing {@code toward} (slime, honey, a sticky piston's head or face; a moving piston). */
+	static boolean stickyAt(ServerLevel level, BlockPos p, Direction toward) {
+		BlockState s = level.getBlockState(p);
+		if (s.is(Blocks.MOVING_PISTON)) return true; // a piston moving there: checked again when it lands
 		if (s.is(Blocks.SLIME_BLOCK) || s.is(Blocks.HONEY_BLOCK)) return true;
-		Direction back = pull.getOpposite();
 		if (s.is(Blocks.PISTON_HEAD)) {
-			return s.getValue(PistonHeadBlock.TYPE) == PistonType.STICKY && s.getValue(PistonHeadBlock.FACING) == back;
+			return s.getValue(PistonHeadBlock.TYPE) == PistonType.STICKY && s.getValue(PistonHeadBlock.FACING) == toward;
 		}
-		return s.is(Blocks.STICKY_PISTON) && s.getValue(PistonBaseBlock.FACING) == back && !s.getValue(PistonBaseBlock.EXTENDED);
+		return s.is(Blocks.STICKY_PISTON) && s.getValue(PistonBaseBlock.FACING) == toward && !s.getValue(PistonBaseBlock.EXTENDED);
 	}
 
-	private static boolean isStretchedPair(ServerLevel level, BlockPos first, Direction dir) {
-		BlockState a = level.getBlockState(first);
-		if (!OcwoSponges.isStretched(a) || a.getValue(StretchedSpongeBlock.FACING) != dir) return false;
-		BlockState b = level.getBlockState(first.relative(dir));
-		return OcwoSponges.isStretched(b) && b.getValue(StretchedSpongeBlock.FACING) == dir.getOpposite();
-	}
-
-	/** The piston cannot push what is in front of it: does it press a sponge instead? */
-	public static boolean canPress(ServerLevel level, BlockPos base, Direction dir) {
-		BlockPos arm = base.relative(dir);
-		BlockState front = level.getBlockState(arm);
-		if (OcwoSponges.isSponge(front)) {
-			if (OcwoSponges.COMPRESSED_SPONGE != null && OcwoSponges.isSponge(level.getBlockState(arm.relative(dir)))) return true;
-			return sim(level).units(arm) > 0;
+	/**
+	 * A stretched sponge holds while a sticky element touches each end. Otherwise it becomes one sponge in the half
+	 * still held (none: the half where it was before it was stretched). Returns true if it changed.
+	 */
+	public static boolean checkStretched(ServerLevel level, BlockPos pos) {
+		if (quiet) return false;
+		BlockState state = level.getBlockState(pos);
+		if (!OcwoSponges.isStretched(state)) return false;
+		BlockPos other = otherHalf(level, pos, state);
+		if (other == null) {
+			// a lone half (should not happen): a sponge again
+			collapse(level, pos, null, pos, Set.of());
+			return true;
 		}
-		return isStretchedPair(level, arm, dir);
-	}
-
-	/** Extending piston that cannot push: presses a sponge if there is one. Returns true if it did (the piston extends). */
-	public static boolean tryPress(ServerLevel level, BlockPos base, Direction dir, boolean sticky) {
-		if (!canPress(level, base, dir)) return false; // cheap: a sponge in front of the piston
-		if (new PistonStructureResolver(level, base, dir, true).resolve()) return false; // it can push: no press
-		BlockPos arm = base.relative(dir);
-		BlockState front = level.getBlockState(arm);
-		BlockState next = level.getBlockState(arm.relative(dir));
-		if (OcwoSponges.isStretched(front)) unstretch(level, base, dir, sticky);
-		else if (OcwoSponges.isSponge(next) && OcwoSponges.COMPRESSED_SPONGE != null) pressTwo(level, base, dir, sticky);
-		else crush(level, base, dir, sticky);
-		level.updateNeighborsAt(arm, Blocks.PISTON_HEAD);
+		Direction f = state.getValue(StretchedSpongeBlock.FACING);
+		boolean heldHere = stickyAt(level, pos.relative(f.getOpposite()), f);
+		boolean heldThere = stickyAt(level, other.relative(f), f.getOpposite());
+		if (heldHere && heldThere) return false;
+		BlockPos target;
+		if (heldHere) target = pos;
+		else if (heldThere) target = other;
+		else if (SpongeRules.STRETCHED_ALONE_BACK_TO_ORIGIN) target = state.getValue(StretchedSpongeBlock.ORIGIN) ? pos : other;
+		else target = pos;
+		collapse(level, pos, other, target, Set.of());
 		return true;
 	}
 
-	private static void extendBase(ServerLevel level, BlockPos base, BlockPos arm, Direction dir, boolean sticky) {
-		BlockState b = level.getBlockState(base);
-		if (b.hasProperty(PistonBaseBlock.EXTENDED)) level.setBlock(base, b.setValue(PistonBaseBlock.EXTENDED, true), Block.UPDATE_CLIENTS);
-		BlockState head = Blocks.PISTON_HEAD.defaultBlockState().setValue(PistonHeadBlock.FACING, dir)
-				.setValue(PistonHeadBlock.TYPE, sticky ? PistonType.STICKY : PistonType.DEFAULT).setValue(PistonHeadBlock.SHORT, false);
-		set(level, arm, head, Block.UPDATE_ALL);
+	/**
+	 * The stretched sponge (a, b) becomes one sponge at target, with all its water; the surplus over 64 comes out
+	 * (never into the blocked cells).
+	 */
+	static void collapse(ServerLevel level, BlockPos a, BlockPos b, BlockPos target, Set<BlockPos> blocked) {
+		BlockPos gone = target.equals(a) ? b : a;
+		int pool = units(level, a) + (b != null ? units(level, b) : 0);
+		if (gone != null) {
+			setUnits(level, gone, 0);
+			set(level, gone, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+		}
+		setUnits(level, target, pool);
+		set(level, target, Blocks.SPONGE.defaultBlockState(), Block.UPDATE_ALL);
+		level.playSound(null, target, SoundEvents.SLIME_BLOCK_PLACE, SoundSource.BLOCKS, 0.8F, 1.2F);
+		releaseSurplus(level, target, blocked);
+		updateLook(level, target);
+		equalize(level, target);
 	}
 
-	/** One wet sponge against a block that does not move: all its water comes back, the sponge breaks. */
-	private static void crush(ServerLevel level, BlockPos base, Direction dir, boolean sticky) {
-		MoistureSimulation sim = sim(level);
-		BlockPos arm = base.relative(dir), wall = arm.relative(dir);
-		BlockState sponge = level.getBlockState(arm);
-		int u = sim.units(arm);
-		sim.setUnits(arm, 0);
-		extendBase(level, base, arm, dir, sticky);
-		level.levelEvent(2001, arm, Block.getId(sponge));
-		Block.popResource(level, arm, new ItemStack(Items.SPONGE));
-		int levels = u / U;
-		int left = release(level, List.of(arm), levels, Set.of(wall, base));
-		left = intoCell(level, arm, left);
-		// what found no room (and the fraction of a level) stays in the cell: it goes out through the head later
-		sim.setUnits(arm, u - (levels - left) * U);
-	}
-
-	/** Two sponges pressed together: each gives back half its water, they become one double sponge. */
-	private static void pressTwo(ServerLevel level, BlockPos base, Direction dir, boolean sticky) {
-		MoistureSimulation sim = sim(level);
-		BlockPos a = base.relative(dir), b = a.relative(dir), wall = b.relative(dir);
-		int ua = sim.units(a), ub = sim.units(b);
-		int levels = (ua / 2 + ub / 2) / U;
-		int keep = ua + ub - levels * U;
-		sim.setUnits(a, 0);
-		sim.setUnits(b, keep);
-		extendBase(level, base, a, dir, sticky);
-		set(level, b, OcwoSponges.COMPRESSED_SPONGE.defaultBlockState().setValue(CompressedSpongeBlock.FACING, dir.getOpposite())
-				.setValue(CompressedSpongeBlock.WET, keep >= U), Block.UPDATE_ALL);
-		level.playSound(null, b, SoundEvents.WET_SPONGE_PLACE, SoundSource.BLOCKS, 1.0F, 0.8F);
-		int left = release(level, List.of(b, a), levels, Set.of(wall, base));
-		left = intoCell(level, a, left);
-		if (left > 0) sim.setUnits(b, keep + left * U);
-		updateLook(level, b);
-	}
-
-	/** Double sponge whose piston head went away: two sponges again, sharing its water, which absorb again. */
-	public static void trySplit(ServerLevel level, BlockPos pos, BlockState state) {
+	/** One half of a stretched sponge was broken: the other half breaks too; one sponge drops (64 levels at most). */
+	public static void onStretchedRemoved(ServerLevel level, BlockPos pos, BlockState state) {
 		if (quiet) return;
-		Direction f = state.getValue(CompressedSpongeBlock.FACING);
+		Direction f = state.getValue(StretchedSpongeBlock.FACING);
 		BlockPos other = pos.relative(f);
 		BlockState os = level.getBlockState(other);
-		if (os.is(Blocks.PISTON_HEAD) || os.is(Blocks.MOVING_PISTON)) return;
+		boolean pair = OcwoSponges.isStretched(os) && os.getValue(StretchedSpongeBlock.FACING) == f.getOpposite();
+		int pool = units(level, pos) + (pair ? units(level, other) : 0);
+		if (pair) {
+			setUnits(level, other, 0);
+			set(level, other, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+			level.levelEvent(2001, other, Block.getId(os));
+		}
+		breakInto(level, pos, pair ? other : null, pool);
+	}
+
+	/** A broken stretched sponge: one item with up to 64 levels, the rest around both cells. */
+	static void breakInto(ServerLevel level, BlockPos a, BlockPos b, int pool) {
+		int levels = pool / U;
+		int item = Math.min(levels, SPONGE_LEVELS);
+		int rest = levels - item;
+		setUnits(level, a, pool - levels * U); // the fraction of a level stays in the cell (released later)
+		if (b != null) setUnits(level, b, 0);
+		int left = release(level, b != null ? List.of(a, b) : List.of(a), rest, Set.of());
+		if (left > 0) setUnits(level, a, units(level, a) + left * U);
+		dropSponge(level, a, item);
+	}
+
+	// ------------------------------------------------------------------ double sponge: held on both sides of its axis
+
+	/** Holds a double sponge on one side: a solid block (not air, not replaceable, not a fluid), or a moving piston. */
+	static boolean holds(ServerLevel level, BlockPos p) {
+		BlockState s = level.getBlockState(p);
+		if (s.is(Blocks.MOVING_PISTON)) return true;
+		if (s.isAir() || s.getBlock() instanceof LiquidBlock) return false;
+		return !s.canBeReplaced();
+	}
+
+	/**
+	 * A double sponge holds while a solid block touches each side along its axis; otherwise it splits into two
+	 * sponges, the second in the freed cell (both free: on the side where the piston head was).
+	 */
+	public static void checkCompressed(ServerLevel level, BlockPos pos) {
+		if (quiet) return;
+		BlockState state = level.getBlockState(pos);
+		if (!OcwoSponges.isCompressed(state)) return;
+		Direction f = state.getValue(CompressedSpongeBlock.FACING);
+		BlockPos head = pos.relative(f), wall = pos.relative(f.getOpposite());
+		boolean h = holds(level, head), w = holds(level, wall);
+		if (h && w) return;
+		split(level, pos, !h ? head : wall);
+	}
+
+	/** The double sponge at pos splits: two sponges sharing its water, the second at other (its water goes in). */
+	static void split(ServerLevel level, BlockPos pos, BlockPos other) {
+		int u = units(level, pos);
+		int half = (u / U / 2) * U;
+		int there = units(level, other);
 		FluidState fs = level.getFluidState(other);
-		if (!fs.isEmpty() && !isWater(fs)) return;
-		if (!os.isAir() && !os.canBeReplaced()) return;
-		MoistureSimulation sim = sim(level);
-		int u = sim.units(pos);
-		int half = u / 2;
-		// water already in the freed cell (and what the head kept) goes into the sponge put there
-		int there = sim.units(other);
 		if (isWater(fs)) {
 			there += fs.getAmount() * U;
 			FluidUtils.setFluid(level, other, Fluids.WATER, 0, false);
 		}
-		sim.setUnits(other, there + half);
-		sim.setUnits(pos, u - half);
+		setUnits(level, other, there + half);
+		setUnits(level, pos, u - half);
 		set(level, pos, Blocks.SPONGE.defaultBlockState(), Block.UPDATE_ALL);
 		set(level, other, Blocks.SPONGE.defaultBlockState(), Block.UPDATE_ALL);
 		level.playSound(null, pos, SoundEvents.SPONGE_PLACE, SoundSource.BLOCKS, 1.0F, 1.2F);
-		absorb(level, pos);
-		absorb(level, other);
 		releaseSurplus(level, other, Set.of(pos));
+		releaseSurplus(level, pos, Set.of(other));
 		updateLook(level, pos);
 		updateLook(level, other);
+		absorb(level, pos);
+		absorb(level, other);
 	}
+
+	/** A double sponge was broken: two sponges drop, each with its half of the water. */
+	public static void onCompressedRemoved(ServerLevel level, BlockPos pos) {
+		if (quiet) return;
+		breakCompressed(level, pos);
+	}
+
+	static void breakCompressed(ServerLevel level, BlockPos pos) {
+		int u = units(level, pos);
+		int levels = u / U;
+		int a = levels / 2, b = levels - a;
+		setUnits(level, pos, u - levels * U);
+		dropSponge(level, pos, Math.min(a, SPONGE_LEVELS));
+		dropSponge(level, pos, Math.min(b, SPONGE_LEVELS));
+		int over = Math.max(0, a - SPONGE_LEVELS) + Math.max(0, b - SPONGE_LEVELS);
+		if (over > 0) giveBack(level, pos, units(level, pos) + over * U);
+	}
+
+	// ------------------------------------------------------------------ pistons: stretching
 
 	/**
 	 * Sticky piston retracting with a sponge in front of its head that is held on the other side by a sticky element:
@@ -371,54 +684,22 @@ public final class SpongeLogic {
 	public static boolean tryStretch(ServerLevel level, BlockPos base, Direction dir) {
 		if (OcwoSponges.STRETCHED_SPONGE == null) return false;
 		BlockPos arm = base.relative(dir), s = arm.relative(dir), anchor = s.relative(dir);
-		if (!OcwoSponges.isSponge(level.getBlockState(s)) || !isStickyAnchor(level.getBlockState(anchor), dir)) return false;
+		if (!OcwoSponges.isSponge(level.getBlockState(s)) || !stickyAt(level, anchor, dir.getOpposite())) return false;
 		BlockState armState = level.getBlockState(arm);
 		if (!armState.is(Blocks.PISTON_HEAD) && !armState.isAir()) return false;
 		BlockState half = OcwoSponges.STRETCHED_SPONGE.defaultBlockState();
-		set(level, arm, half.setValue(StretchedSpongeBlock.FACING, dir), Block.UPDATE_ALL);
-		set(level, s, half.setValue(StretchedSpongeBlock.FACING, dir.getOpposite()), Block.UPDATE_ALL);
+		set(level, arm, half.setValue(StretchedSpongeBlock.FACING, dir).setValue(StretchedSpongeBlock.ORIGIN, false), Block.UPDATE_ALL);
+		set(level, s, half.setValue(StretchedSpongeBlock.FACING, dir.getOpposite()).setValue(StretchedSpongeBlock.ORIGIN, true), Block.UPDATE_ALL);
 		level.playSound(null, s, SoundEvents.SLIME_BLOCK_PLACE, SoundSource.BLOCKS, 0.8F, 0.7F);
+		setPool(level, s, poolUnits(level, s));
 		absorb(level, s);
-		absorb(level, arm);
 		updateLook(level, s);
-		updateLook(level, arm);
 		return true;
-	}
-
-	/** The piston pushes a stretched sponge back into one block: one sponge, the surplus comes back around it. */
-	private static void unstretch(ServerLevel level, BlockPos base, Direction dir, boolean sticky) {
-		MoistureSimulation sim = sim(level);
-		BlockPos arm = base.relative(dir), s = arm.relative(dir);
-		int total = sim.units(arm) + sim.units(s);
-		sim.setUnits(arm, 0);
-		sim.setUnits(s, total);
-		set(level, s, Blocks.SPONGE.defaultBlockState(), Block.UPDATE_ALL);
-		extendBase(level, base, arm, dir, sticky);
-		releaseSurplus(level, s, Set.of(arm, base));
-		updateLook(level, s);
-	}
-
-	/** One half of a stretched sponge was destroyed: the other half is one sponge again (surplus given back). */
-	public static void onStretchedRemoved(ServerLevel level, BlockPos pos, BlockState state) {
-		if (quiet) return;
-		MoistureSimulation sim = sim(level);
-		BlockPos other = pos.relative(state.getValue(StretchedSpongeBlock.FACING));
-		BlockState os = level.getBlockState(other);
-		int u = sim.units(pos);
-		if (OcwoSponges.isStretched(os) && os.getValue(StretchedSpongeBlock.FACING) == state.getValue(StretchedSpongeBlock.FACING).getOpposite()) {
-			sim.setUnits(pos, 0);
-			sim.setUnits(other, sim.units(other) + u);
-			set(level, other, Blocks.SPONGE.defaultBlockState(), Block.UPDATE_ALL);
-			releaseSurplus(level, other, Set.of(pos));
-			updateLook(level, other);
-		} else {
-			onSpongeGone(level, pos, u);
-		}
 	}
 
 	/**
 	 * Before a retracting piston pulls a block into its head's cell: the water the head held goes around it first
-	 * (vanilla replaces the head with air, which would delete it).
+	 * (vanilla replaces the head with air, which would delete it). Only for worlds where the head took water.
 	 */
 	public static void saveHeadWater(ServerLevel level, BlockPos base, Direction dir) {
 		BlockPos arm = base.relative(dir);
@@ -428,7 +709,7 @@ public final class SpongeLogic {
 		int levels = fs.getAmount();
 		FluidUtils.setFluid(level, arm, Fluids.WATER, 0, false);
 		int left = release(level, List.of(arm), levels, Set.of(base, arm.relative(dir)));
-		if (left > 0) sim(level).setUnits(arm, sim(level).units(arm) + left * U);
+		if (left > 0) setUnits(level, arm, units(level, arm) + left * U);
 	}
 
 	/**
@@ -457,5 +738,41 @@ public final class SpongeLogic {
 		for (int i = 0; i < toPush.size(); i++) {
 			if (carry[i] > 0) sim.setUnits(dest.get(i), sim.units(dest.get(i)) + carry[i]);
 		}
+	}
+
+	// ------------------------------------------------------------------ squeezing it by jumping on it
+
+	/**
+	 * An entity lands on a sponge: a jump squeezes 1 level out of a full sponge (never under full - 1), a hard landing
+	 * 4 levels (never under full - 4); a stretched sponge counts its 128 levels. The water goes into the cell above,
+	 * then beside the sponge; what finds no room stays in the sponge.
+	 */
+	public static void onFallOn(ServerLevel level, BlockState state, BlockPos pos, double fallDistance) {
+		if (fallDistance < SpongeRules.JUMP_MIN_FALL) return;
+		if (!OcwoSponges.isSponge(state) && !OcwoSponges.isStretched(state)) return;
+		int pool = poolUnits(level, pos);
+		int full = poolCapacity(level, pos) / U;
+		boolean hard = fallDistance > SpongeRules.HARD_FALL;
+		int squeeze = hard ? SpongeRules.LANDING_LEVELS : SpongeRules.JUMP_LEVELS;
+		int out = Math.min(squeeze, pool / U - (full - squeeze));
+		if (out <= 0) return;
+		List<BlockPos> cells = new ArrayList<>();
+		cells.add(pos.above());
+		for (Direction d : new Direction[]{Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST}) cells.add(pos.relative(d));
+		int placed = 0;
+		for (BlockPos c : cells) {
+			if (placed >= out) break;
+			if (!free(level, c)) continue;
+			FluidState fs = level.getFluidState(c);
+			int have = isWater(fs) ? fs.getAmount() : 0;
+			int put = Math.min(out - placed, FluidUtils.MAX_LEVEL - have);
+			FluidUtils.setFluid(level, c, Fluids.WATER, have + put, false);
+			placed += put;
+		}
+		if (placed == 0) return;
+		setPool(level, pos, pool - placed * U);
+		level.playSound(null, pos, SoundEvents.WET_SPONGE_DRIES, SoundSource.BLOCKS, 0.6F, 1.4F);
+		updateLook(level, pos);
+		equalize(level, pos);
 	}
 }

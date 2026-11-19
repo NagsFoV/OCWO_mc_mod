@@ -69,5 +69,8 @@
 	"gamerule.ocwo.moisture_evaporation.description": "Percent of each moisture transfer (water soaked up by a block, moisture passed to a neighbour) that evaporates into the clouds of the zone, in a temperate biome: half in cold biomes, up to 3.5 times more in hot, dry ones. 0 = none",
 	"gamerule.ocwo.reservoir_min_blocks": "Smallest abstract reservoir (blocks)",
 	"gamerule.ocwo.reservoir_min_blocks.description": "A body of natural water at rest with at least this many blocks is one tank: the water taken from it comes off its surface, which goes down evenly, without waking the whole body. Smaller bodies flow normally. 0 = no reservoirs",
-	"ocwo.water.ledger.sources": "zone sources (outlets of saturated ground): %s %s"
+	"ocwo.water.ledger.sources": "zone sources (outlets of saturated ground): %s %s",
+	"tooltip.ocwo.sponge_water": "Water: %s levels",
+	"gamerule.ocwo.sponge_drying": "Sponges dry",
+	"gamerule.ocwo.sponge_drying.description": "In the open, in hot biomes where it never rains (desert, badlands, savanna), sponges slowly dry: a full sponge in about one day. The water goes to the clouds"
 }
