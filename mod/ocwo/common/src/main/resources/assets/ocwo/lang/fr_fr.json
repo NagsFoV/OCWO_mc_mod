@@ -41,12 +41,15 @@
 	"gamerule.ocwo.water_simulation_distance.description": "Distance autour des joueurs où l'eau est simulée (écoulement, pression, humidité), en chunks. -1 = la distance de simulation du serveur. Au-delà, l'eau est figée, sans rien perdre. Chaque tick fait tout le travail de l'eau dans cette zone : baissez-la si le jeu rame",
 	"ocwo.debug.flag.resting": "au repos",
 	"ocwo.water.rest": "%s blocs d'eau réveillés remis au repos dans un rayon de %s chunks",
-	"ocwo.water.info": "%s blocs d'eau réveillés dans un rayon de %s chunks (toute l'autre eau est au repos) ; réserve d'eau de cette zone : %s niveaux",
+	"ocwo.water.info": "%s blocs d'eau réveillés dans un rayon de %s chunks (toute l'autre eau est au repos) ; réserve d'eau de cette zone : %s niveaux, nuages : %s niveaux",
 	"gamerule.ocwo.water_rest": "Eau au repos",
 	"gamerule.ocwo.water_rest.description": "L'eau de la génération du monde n'est pas simulée (écoulement, pression, humidité) tant que rien ne la dérange : un bloc modifié à côté la réveille, et le réveil s'étend aussi loin que l'eau bouge",
-	"ocwo.debug.head.reserve": "OCWO réserve d'eau de la zone : %s niveaux",
+	"ocwo.debug.head.reserve": "OCWO réserve d'eau de la zone : %s niveaux, nuages : %s niveaux",
 	"gamerule.ocwo.moisture_random_ticks": "Ticks aléatoires de l'humidité",
 	"gamerule.ocwo.moisture_random_ticks.description": "Blocs tirés au hasard à chaque tick dans chaque section de chunk dont l'humidité a été dérangée (comme randomTickSpeed pour les cultures). Plus haut : les blocs s'imbibent et sèchent plus vite. 0 = humidité figée",
 	"block.ocwo.stretched_sponge": "Éponge étirée",
-	"block.ocwo.compressed_sponge": "Double éponge"
+	"block.ocwo.compressed_sponge": "Double éponge",
+	"ocwo.water.ledger.zone": "Registre d'eau de la zone %s, %s (blocs %s, %s à %s, %s), %s/16 chunks chargés :",
+	"ocwo.water.ledger.stocks": "eau visible %s niveaux, humidité des blocs %s niveaux, réserve %s niveaux, nuages %s niveaux",
+	"ocwo.water.ledger.total": "total : %s unités (%s niveaux). Il ne change que quand de l'eau passe le bord de la zone ou qu'un chunk se charge"
 }

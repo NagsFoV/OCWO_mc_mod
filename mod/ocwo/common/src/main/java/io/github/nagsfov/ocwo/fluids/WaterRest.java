@@ -24,9 +24,11 @@ import net.minecraft.world.level.material.FluidState;
  * water changes its neighbours, so the awakening spreads as far as the water moves. Awake water that has not moved
  * for {@link #SLEEP_TICKS} ticks, with no flow task due and no pressure body with work next to it, goes back to rest.
  * <p>
- * <b>Reservoir</b>: when the flow (awake water) takes water from natural water at rest (never disturbed since the
- * world generation) or gives it some, that water keeps its level and the difference goes to the reserve of the zone ({@link WaterReserves}). When the reserve is
- * empty, the water at rest really goes down (and wakes up).
+ * <b>Reservoir</b>: when the flow (awake water) takes water from natural water (never changed since the world
+ * generation) or gives it some, that water keeps its level and the difference goes to the reserve of the zone
+ * ({@link WaterReserves}). The reserve starts at 0 and only holds water that was somewhere else before (generation
+ * moisture of mined blocks, water poured into natural water): when it cannot pay, the natural water really goes down
+ * (and wakes up).
  * <p>
  * Awake positions are saved with the chunk ({@link WakeLayer}); a chunk without them has all its fluid at rest. A
  * chunk of an existing world (players have been there) seen for the first time by this version keeps its moving

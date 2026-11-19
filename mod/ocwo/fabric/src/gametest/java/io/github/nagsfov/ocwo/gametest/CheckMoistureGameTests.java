@@ -167,8 +167,9 @@ public class CheckMoistureGameTests {
 	}
 
 	/**
-	 * Mud made by the simulation, mined then placed back: liquid water + moisture + the water carried by the item
-	 * (min(moisture, fixed water) when mined) stays constant, and the placed mud does not turn back into dirt.
+	 * Mud made by the simulation, mined then placed back: liquid water + moisture + the zone's reserve + the water
+	 * carried by the item (min(moisture, fixed water) when mined) stays constant, and the placed mud does not turn
+	 * back into dirt. Mining gives the mud's generation moisture (what it would hold here at rest) to the reserve.
 	 */
 	@GameTest(environment = "ocwo-gametest:moisture_fast", maxTicks = 1000, padding = 24)
 	public void mudMinedAndPlacedKeepsWater(GameTestHelper h) {
@@ -184,19 +185,19 @@ public class CheckMoistureGameTests {
 		h.succeedWhen(() -> {
 			if (before[0] < 0) {
 				h.assertTrue(h.getBlockState(p).is(Blocks.MUD), "Dirt did not become mud yet");
-				before[0] = WaterCount.units(h, 0, 0, 0, 4, 4, 4);
+				before[0] = WaterCount.units(h, 0, 0, 0, 4, 4, 4) + WaterCount.ledger(h, 0, 0, 4, 4);
 				int moisture = WaterCount.moisture(h, p);
 				// mine it: the item carries min(moisture, fixed water = 2 levels)
 				carried[0] = Math.min(moisture, 2 * io.github.nagsfov.ocwo.moisture.Moisture.UNITS_PER_LEVEL);
 				h.getLevel().setBlock(h.absolutePos(p), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-				long afterMining = WaterCount.units(h, 0, 0, 0, 4, 4, 4);
+				long afterMining = WaterCount.units(h, 0, 0, 0, 4, 4, 4) + WaterCount.ledger(h, 0, 0, 4, 4);
 				h.assertTrue(afterMining == before[0] - carried[0], "Mining: " + before[0] + " - " + carried[0] + " expected, got " + afterMining);
 				// place it back
 				h.getLevel().setBlock(h.absolutePos(p), Blocks.MUD.defaultBlockState(), Block.UPDATE_ALL);
 				h.fail("waiting");
 				return;
 			}
-			long now = WaterCount.units(h, 0, 0, 0, 4, 4, 4);
+			long now = WaterCount.units(h, 0, 0, 0, 4, 4, 4) + WaterCount.ledger(h, 0, 0, 4, 4);
 			h.assertTrue(now == before[0] - carried[0] + 2L * io.github.nagsfov.ocwo.moisture.Moisture.UNITS_PER_LEVEL,
 					"Total after placing back: " + now + " (before mining " + before[0] + ", carried " + carried[0] + ")");
 			h.assertTrue(h.getTick() > 200, "waiting for the placed mud to be simulated");

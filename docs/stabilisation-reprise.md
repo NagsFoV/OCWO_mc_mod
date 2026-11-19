@@ -16,7 +16,7 @@ Aucun Gradle ni serveur de test bloqué. Une copie de sauvegarde de tout ce trav
 | # | Étape | État |
 |---|---|---|
 | 1 | Moins de matériaux humides | fait, tests verts |
-| 2 | Registre d'eau par zone de 4×4 chunks | à faire |
+| 2 | Registre d'eau par zone de 4×4 chunks | fait, tests verts |
 | 3 | Évaporation à chaque transfert d'humidité | à faire |
 | 4 | Réservoirs abstraits pour les grandes masses d'eau au repos | à faire |
 | 5 | Sources de zone | à faire |
@@ -33,7 +33,24 @@ Tests : `cobblestoneWallSeeps` devient `gravelWallSeeps` ; `basaltIsDirectional`
 
 **Page de classement** : sa base n'a pas les nouvelles valeurs des matériaux (la collection `materials` est vide, la page montre donc les anciennes valeurs par défaut) ni le retrait du réglage de l'ancient debris. Les fichiers du dépôt (`tools/store`) et les données du mod ont les bonnes valeurs. Je n'ai pas écrit dans la page sans l'accord de Valentin.
 
+## Étape 2 : registre d'eau par zone
+
+Détail dans `03-humidite-et-etats-des-blocs.md`, « Registre d'eau par zone ». En bref :
+- registre par zone de 4×4 chunks, en unités : réserve et nuages ; conversion des anciennes sauvegardes (niveaux → unités) ;
+- **fuite 1** : la réserve démarre à 0 (elle démarrait au volume d'eau de la zone, l'eau était comptée deux fois) ;
+- **fuite 2** : un bloc qui s'en va rend son humidité de génération à la réserve (le surplus sort en eau dans la case) ; l'humidité restée dans un bloc plein qui n'en tient plus (pierre des anciens mondes) va aussi à la réserve ;
+- **fuite 3** : l'eau naturelle ne garde son niveau que si la réserve a vraiment l'eau ; sinon elle baisse vraiment ;
+- éponges générées : humidité de génération cohérente (sèche = 0, mouillée = pleine) ;
+- commande `/ocwo water ledger` ; réserve et nuages dans F3 et `/ocwo water info`.
+
+Tests : nouveau `CheckLedgerGameTests.zoneTotalStaysConstant` (seul dans son lot) ; `disturbanceWakesLocally` mis à jour (la réserve ne paie que ce qu'elle a, seul dans son lot) ; `mudMinedAndPlacedKeepsWater` compte la réserve.
+
+**Effet en jeu à surveiller** : sans réserve inventée, une tranchée creusée depuis une rivière ou un lac fait vraiment baisser l'eau naturelle, qui se réveille. Dans un vrai monde, ça peut réveiller beaucoup d'eau d'un coup (c'était la raison de la réserve). L'étape 4 (réservoirs abstraits) est là pour ça.
+
 ## Choix faits seul
 
 - **Poudre de béton** : gardée humide (capacité 1), alors qu'elle n'est pas dans la liste. Sans humidité, elle ne pourrait plus devenir du béton au contact de l'eau.
 - **Neige** : la liste dit qu'elle garde l'humidité, mais elle n'en avait déjà pas (bloc fait d'eau, avec la glace). Je ne l'ai pas changée : ce serait ajouter un matériau humide, pas en retirer.
+- **Anciennes réserves** : gardées telles quelles à la conversion (en unités). Elles contiennent l'eau comptée deux fois, mais aussi de la vraie eau versée dans l'eau naturelle, et on ne peut pas séparer les deux. À confirmer : les remettre à 0 dans les mondes existants.
+- **Ordre de paiement** : quand l'écoulement prend à de l'eau naturelle, la réserve de la zone paie d'abord (comme avant).
+- **Mesure de l'humidité de génération rendue** : ce qu'un bloc tiendrait au repos à sa place (même calcul que l'humidité de génération), plafonné à ce qu'il tient vraiment.

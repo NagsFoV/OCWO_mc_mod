@@ -42,6 +42,23 @@ final class WaterCount {
 		return sum;
 	}
 
+	/**
+	 * Reserves + clouds of the zones (4 x 4 chunks) touched by the box (plus {@link #MARGIN}), in units: where a block
+	 * that goes away puts its generation moisture. Shared by every test in the same zone: only meaningful when the
+	 * other tests of the batch do not feed the ledger at the same time.
+	 */
+	static long ledger(GameTestHelper h, int x0, int z0, int x1, int z1) {
+		var r = io.github.nagsfov.ocwo.fluids.WaterReserves.get(h.getLevel());
+		java.util.Set<Long> zones = new java.util.HashSet<>();
+		long sum = 0;
+		for (int x : new int[]{x0 - MARGIN, x1 + MARGIN})
+			for (int z : new int[]{z0 - MARGIN, z1 + MARGIN}) {
+				long zone = io.github.nagsfov.ocwo.fluids.WaterReserves.zone(h.absolutePos(new BlockPos(x, 0, z)));
+				if (zones.add(zone)) sum += r.reserveOf(zone) + r.cloudsOf(zone);
+			}
+		return sum;
+	}
+
 	/** Per-cell snapshot "x,y,z" -> "liquid/moisture" (diagnostics). */
 	static java.util.Map<String, String> snapshot(GameTestHelper h, int x0, int y0, int z0, int x1, int y1, int z1) {
 		java.util.Map<String, String> m = new java.util.HashMap<>();

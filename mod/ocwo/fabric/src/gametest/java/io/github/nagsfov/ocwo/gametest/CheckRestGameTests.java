@@ -28,6 +28,20 @@ public class CheckRestGameTests {
 		return fs.getType().isSame(Fluids.WATER) ? fs.getAmount() : 0;
 	}
 
+	/** Reserves (units) of the zones the build touches (a pool can sit across a zone border). */
+	private static long reserves(GameTestHelper h) {
+		ServerLevel level = h.getLevel();
+		var ledger = io.github.nagsfov.ocwo.fluids.WaterReserves.get(level);
+		java.util.Set<Long> zones = new java.util.HashSet<>();
+		long sum = 0;
+		for (int x : new int[]{0, 20})
+			for (int z : new int[]{0, 8}) {
+				BlockPos p = h.absolutePos(new BlockPos(x, 1, z));
+				if (zones.add(io.github.nagsfov.ocwo.fluids.WaterReserves.zone(p))) sum += ledger.reserveUnits(level, p);
+			}
+		return sum; // units
+	}
+
 	private static long total(GameTestHelper h) {
 		long sum = 0;
 		for (int x = 0; x <= 20; x++)
@@ -103,7 +117,13 @@ public class CheckRestGameTests {
 		});
 	}
 
-	@GameTest(maxTicks = 600, padding = 32)
+	/**
+	 * The player opens the wall between pool A (natural water at rest) and a sealed pocket. The zone's reserve starts
+	 * at 0 and only holds water that was somewhere else before: what it cannot pay really comes out of pool A, which
+	 * wakes up (no invisible water). Pool B, never touched, stays at rest. Alone in its batch: the reserves are shared
+	 * by everything in a zone.
+	 */
+	@GameTest(environment = "ocwo-gametest:ledger_rest", maxTicks = 600, padding = 32)
 	public void disturbanceWakesLocally(GameTestHelper h) {
 		build(h);
 		ServerLevel level = h.getLevel();
@@ -111,25 +131,34 @@ public class CheckRestGameTests {
 		BlockPos poolA = h.absolutePos(new BlockPos(3, 1, 3));
 		long[] reserve0 = {0};
 		h.runAfterDelay(5, () -> {
-			reserve0[0] = io.github.nagsfov.ocwo.fluids.WaterReserves.get(level).reserve(level, poolA);
+			reserve0[0] = reserves(h);
 			// the player opens the wall between pool A and the sealed pocket
 			level.setBlock(h.absolutePos(new BlockPos(3, 1, 6)), Blocks.AIR.defaultBlockState(), 3);
 		});
 		h.runAfterDelay(300, () -> {
-			long reserve = io.github.nagsfov.ocwo.fluids.WaterReserves.get(level).reserve(level, poolA);
+			long reserve = reserves(h);
 			long visible = total(h);
 			// exact conservation: visible water plus the zone's reserve
-			if (visible + reserve != start + reserve0[0]) h.fail("water not conserved: " + (start + reserve0[0]) + " -> " + (visible + reserve)
+			if (visible * 16 + reserve != start * 16 + reserve0[0]) h.fail("water not conserved (units): " + (start * 16 + reserve0[0]) + " -> " + (visible * 16 + reserve)
 					+ " (visible " + start + " -> " + visible + ", reserve " + reserve0[0] + " -> " + reserve + ")");
-			// the pocket filled from pool A, which is natural water at rest: it kept its level, the reserve paid
-			if (level(h, 3, 1, 7) == 0) h.fail("the pocket did not fill");
-			if (level(h, 2, 1, 2) != 8 || level(h, 2, 2, 2) != 8) h.fail("natural water lost its level (reservoir)");
-			if (reserve >= reserve0[0]) h.fail("the reserve did not pay for the pocket (" + reserve0[0] + " -> " + reserve + ")");
+			// the pocket filled from pool A, natural water at rest: the reserve paid what it had, the rest came out of the
+			// pool for real (before 19/11/2026 the reserve started at the volume of the zone and the pool kept its level)
+			int pocket = 0, poolALevels = 0;
+			for (int x = 2; x <= 4; x++)
+				for (int y = 1; y <= 2; y++) pocket += level(h, x, y, 7);
+			for (int x = 1; x <= 5; x++)
+				for (int z = 1; z <= 5; z++)
+					for (int y = 1; y <= 2; y++) poolALevels += level(h, x, y, z);
+			if (pocket == 0) h.fail("the pocket did not fill");
+			if (reserve < 0 || reserve > reserve0[0]) h.fail("the reserve went from " + reserve0[0] + " to " + reserve + " units");
+			if (pocket * 16L > reserve0[0] && poolALevels >= 48 * 8) h.fail("pool A kept its level (" + poolALevels + " levels) although the reserve ("
+					+ reserve0[0] + " units) could not pay for the pocket (" + pocket + " levels): invisible water");
 			// pool B, never touched, is still at rest with its hole empty
 			if (!WaterRest.isResting(level, h.absolutePos(new BlockPos(13, 1, 2)))) h.fail("pool B woke up");
 			if (level(h, 16, 1, 5) != 0) h.fail("pool B flowed");
 			int awake = WaterRest.awakeAround(level, poolA, 2);
-			System.out.println("[OCWO-TEST] rest: " + awake + " awake water blocks after the disturbance, reserve " + reserve0[0] + " -> " + reserve);
+			System.out.println("[OCWO-TEST] rest: " + awake + " awake water blocks after the disturbance, reserve " + reserve0[0] + " -> " + reserve
+					+ " units, pool A " + poolALevels + " levels, pocket " + pocket + " levels");
 			h.succeed();
 		});
 	}

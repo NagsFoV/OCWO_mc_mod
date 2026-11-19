@@ -266,6 +266,30 @@ Décision de Valentin : seuls les sols meubles et quelques blocs absorbants gard
 
 Conséquences : un mur de cobblestone est étanche, comme l'obsidienne. Le test « mur qui suinte » se fait maintenant avec du gravier, et le test du basalte directionnel est retiré (le basalte ne prend plus d'eau). Nouveau test : `cobblestoneHoldsNoWater`.
 
+### Registre d'eau par zone
+
+Chaque zone de 4×4 chunks (64×64 blocs, sur toute la hauteur) a un registre (`WaterReserves`, sauvegardé avec le monde), en unités d'humidité (1 niveau = 16 unités). Il tient deux réserves invisibles :
+- **la réserve** (l'eau souterraine) ;
+- **les nuages** : l'eau évaporée, en attendant la pluie.
+
+**Conservation exacte**, en unités : eau visible + humidité des blocs + réserves + nuages. Seule la génération du monde crée de l'eau (blocs d'eau et humidité de génération).
+
+Ce qui passe par la réserve :
+- **Eau naturelle** (jamais modifiée depuis la génération) : quand l'écoulement lui prend de l'eau ou lui en verse, elle garde son niveau et la réserve paie ou reçoit la différence, tant qu'elle le peut. Quand la réserve ne peut pas payer, l'eau naturelle baisse vraiment et se réveille.
+- **Bloc qui s'en va** (miné, remplacé, détruit) : son humidité de génération, ce qu'il tiendrait ici au repos, retourne à la réserve. Seul ce qu'il a absorbé en plus sort en eau dans la case : miner de la terre humide n'inonde pas un tunnel. Les éponges ne sont pas concernées (elles rendent toute leur eau, voir « Éponges »), ni un bloc poussé par un piston.
+- **Humidité restée dans un bloc plein qui n'en tient pas** (la pierre d'un monde sauvegardé avant le 19/11/2026, ou un bloc posé sur de la terre mouillée) : elle va à la réserve au lieu de suinter de la pierre.
+
+**Trois fuites fermées** (19/11/2026) :
+1. La réserve d'une zone démarrait au volume d'eau de ses chunks chargés : l'eau était comptée deux fois. Elle démarre maintenant à 0.
+2. L'humidité de génération d'un bloc miné sortait en eau. Elle retourne maintenant à la réserve.
+3. L'eau naturelle gardait son niveau grâce à cette réserve inventée. Elle ne le garde plus que si la réserve a vraiment l'eau.
+
+**Anciennes sauvegardes** : les réserves enregistrées en niveaux sont converties en unités et gardées telles quelles. Elles contiennent l'eau comptée deux fois, mais aussi l'eau vraiment versée dans l'eau naturelle, et on ne peut pas séparer les deux : les remettre à 0 détruirait de la vraie eau. Les éponges générées (monuments) ont aussi une humidité de génération cohérente : sèches pour l'éponge, pleines pour l'éponge mouillée (avant, une éponge sèche sous le niveau de la mer tenait 64 niveaux cachés).
+
+**Commande** `/ocwo water ledger` (opérateurs) : pour la zone où l'on se trouve, l'eau visible, l'humidité des blocs (y compris l'humidité de génération des sections jamais dérangées), la réserve, les nuages et le total en unités, comptés sur les chunks chargés de la zone. Le total ne change que quand de l'eau passe le bord de la zone ou qu'un chunk se charge. La réserve et les nuages sont aussi dans F3 et dans `/ocwo water info`.
+
+**Tests** : `CheckLedgerGameTests.zoneTotalStaysConstant` (un bassin naturel, un mur de terre naturelle dans un biome de plaine, une poche vide, une pierre qui garde de l'humidité ; le joueur mine la terre ; à chaque tick, eau + humidité + réserves + nuages constant ; au début et à la fin, le total de chaque zone touchée, compté comme la commande, constant) et `CheckRestGameTests.disturbanceWakesLocally` (la réserve ne paie que ce qu'elle a, le reste sort vraiment du bassin). Chacun tourne seul dans son lot, parce que le registre est partagé par tout ce qui est dans la zone.
+
 ## Questions ouvertes
 
 - La liste des blocs perméables : quels blocs pleins laissent passer l'eau, et à quelle vitesse ?

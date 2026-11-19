@@ -54,12 +54,15 @@
 	"gamerule.ocwo.water_simulation_distance.description": "Distance around players where water is simulated (flow, pressure, moisture), in chunks. -1 = the server simulation distance. Beyond it, water is frozen and nothing is lost. Every tick does all the water work in this area: lower it if the game lags",
 	"ocwo.debug.flag.resting": "at rest",
 	"ocwo.water.rest": "%s awake water blocks put back at rest within %s chunks",
-	"ocwo.water.info": "%s awake water blocks within %s chunks (all other water is at rest); water reserve of this zone: %s levels",
+	"ocwo.water.info": "%s awake water blocks within %s chunks (all other water is at rest); water reserve of this zone: %s levels, clouds: %s levels",
 	"gamerule.ocwo.water_rest": "Water at rest",
 	"gamerule.ocwo.water_rest.description": "The water of the world generation is not simulated (flow, pressure, moisture) until something disturbs it: a block changed next to it wakes it up, and the awakening spreads as far as the water moves",
-	"ocwo.debug.head.reserve": "OCWO water reserve of the zone: %s levels",
+	"ocwo.debug.head.reserve": "OCWO water reserve of the zone: %s levels, clouds: %s levels",
 	"gamerule.ocwo.moisture_random_ticks": "Moisture random ticks",
 	"gamerule.ocwo.moisture_random_ticks.description": "Blocks drawn at random every tick in each chunk section that holds disturbed moisture (like randomTickSpeed for crops). Higher: blocks soak up and dry faster. 0 = moisture frozen",
 	"block.ocwo.stretched_sponge": "Stretched Sponge",
-	"block.ocwo.compressed_sponge": "Double Sponge"
+	"block.ocwo.compressed_sponge": "Double Sponge",
+	"ocwo.water.ledger.zone": "Water ledger of zone %s, %s (blocks %s, %s to %s, %s), %s/16 chunks loaded:",
+	"ocwo.water.ledger.stocks": "visible water %s levels, block moisture %s levels, reserve %s levels, clouds %s levels",
+	"ocwo.water.ledger.total": "total: %s units (%s levels). It only changes when water crosses the edge of the zone or a chunk loads"
 }

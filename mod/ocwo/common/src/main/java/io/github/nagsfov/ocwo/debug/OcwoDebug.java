@@ -88,10 +88,14 @@ public final class OcwoDebug {
 									int r = com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius");
 									BlockPos at = BlockPos.containing(ctx.getSource().getPosition());
 									int n = io.github.nagsfov.ocwo.fluids.WaterRest.awakeAround(ctx.getSource().getLevel(), at, r);
-									long reserve = io.github.nagsfov.ocwo.fluids.WaterReserves.get(ctx.getSource().getLevel()).reserve(ctx.getSource().getLevel(), at);
-									ctx.getSource().sendSuccess(() -> Component.translatable("ocwo.water.info", n, r, reserve), false);
+									var ledger = io.github.nagsfov.ocwo.fluids.WaterReserves.get(ctx.getSource().getLevel());
+									long reserve = ledger.reserve(ctx.getSource().getLevel(), at);
+									String clouds = levels(ledger.clouds(at));
+									ctx.getSource().sendSuccess(() -> Component.translatable("ocwo.water.info", n, r, reserve, clouds), false);
 									return n;
-								}))))
+								})))
+							.then(Commands.literal("ledger")
+									.executes(ctx -> ledger(ctx.getSource()))))
 				.then(Commands.literal("pressure")
 						.requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
 						.then(Commands.literal("queue")
@@ -100,6 +104,29 @@ public final class OcwoDebug {
 									for (String l : lines) ctx.getSource().sendSuccess(() -> Component.literal(l), false);
 									return lines.size();
 								}))));
+	}
+
+	/** Units as water levels, one decimal. */
+	private static String levels(long units) {
+		return String.format(Locale.ROOT, "%.1f", units / (double) Moisture.UNITS_PER_LEVEL);
+	}
+
+	/**
+	 * {@code /ocwo water ledger}: what the zone (4 x 4 chunks) of the source holds, counted in its loaded chunks:
+	 * visible water, block moisture, reserve, clouds, and the total in units (03, "Registre d'eau par zone").
+	 */
+	private static int ledger(CommandSourceStack source) {
+		ServerLevel level = source.getLevel();
+		BlockPos at = BlockPos.containing(source.getPosition());
+		var count = io.github.nagsfov.ocwo.fluids.WaterReserves.get(level).count(level, at);
+		long zone = count.zone();
+		int zx = io.github.nagsfov.ocwo.fluids.WaterReserves.zoneX(zone), zz = io.github.nagsfov.ocwo.fluids.WaterReserves.zoneZ(zone);
+		source.sendSuccess(() -> Component.translatable("ocwo.water.ledger.zone", zx, zz, zx << 6, zz << 6, (zx << 6) + 63, (zz << 6) + 63,
+				count.loadedChunks()), false);
+		source.sendSuccess(() -> Component.translatable("ocwo.water.ledger.stocks", levels(count.liquidUnits()), levels(count.moistureUnits()),
+				levels(count.reserveUnits()), levels(count.cloudUnits())), false);
+		source.sendSuccess(() -> Component.translatable("ocwo.water.ledger.total", count.total(), levels(count.total())), false);
+		return (int) Math.min(Integer.MAX_VALUE, count.total() / Moisture.UNITS_PER_LEVEL);
 	}
 
 	/** A player's client changed the OCWO entries shown in F3 (0 = none). */
@@ -182,7 +209,8 @@ public final class OcwoDebug {
 		Vec3 eye = player.getEyePosition();
 		BlockPos pos = BlockPos.containing(eye);
 		if (io.github.nagsfov.ocwo.fluids.WaterRest.enabled(level)) {
-			out.add(line("ocwo.debug.head.reserve", io.github.nagsfov.ocwo.fluids.WaterReserves.get(level).reserve(level, pos)));
+			var ledger = io.github.nagsfov.ocwo.fluids.WaterReserves.get(level);
+			out.add(line("ocwo.debug.head.reserve", ledger.reserve(level, pos), levels(ledger.clouds(pos))));
 		}
 		FluidState fs = level.getFluidState(pos);
 		if (fs.isEmpty() || !(fs.getType() instanceof FlowingFluid)) {

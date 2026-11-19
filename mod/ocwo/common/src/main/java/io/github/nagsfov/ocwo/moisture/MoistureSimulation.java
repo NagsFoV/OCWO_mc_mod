@@ -123,6 +123,8 @@ public final class MoistureSimulation {
 		MoistureProps props = MoistureData.get(state);
 		if (props == null || !props.holdsMoisture()) return 0;
 		int cap = props.capacity();
+		// sponges (ocean monuments): a dry sponge is dry, a wet one full (not saturated because under sea level)
+		if (io.github.nagsfov.ocwo.sponge.OcwoSponges.isAnySponge(state)) return state.is(net.minecraft.world.level.block.Blocks.WET_SPONGE) ? cap : 0;
 		Moisture.Stage stage;
 		if (pos.getY() < level.getSeaLevel()) {
 			stage = Moisture.Stage.SATURE;
@@ -191,11 +193,21 @@ public final class MoistureSimulation {
 		int h = layer != null && layer.has(chunk, pos) ? layer.get(chunk, pos) : equilibrium(pos, oldState);
 		if (oldProps != null && oldProps.holdsMoisture() && oldProps.fixedWater() > 0) h -= Math.min(h, oldProps.fixedWater());
 		if (newProps != null && newProps.holdsMoisture() && newProps.fixedWater() > 0) h += newProps.fixedWater();
+		boolean gone = (newProps == null || !newProps.holdsMoisture()) && !newState.is(net.minecraft.world.level.block.Blocks.MOVING_PISTON);
+		if (gone && oldProps != null && oldProps.holdsMoisture() && !io.github.nagsfov.ocwo.sponge.OcwoSponges.isAnySponge(oldState)) {
+			// a block that goes away gives its generation moisture back to the ground water of its zone (03, "Registre
+			// d'eau par zone"): only what it soaked up on top of it comes out as water (mining damp soil does not flood
+			// a tunnel)
+			int back = Math.min(h, equilibrium(pos, oldState));
+			if (back > 0) {
+				io.github.nagsfov.ocwo.fluids.WaterReserves.get(level).giveUnits(level, pos, back);
+				h -= back;
+			}
+		}
 		setUnits(pos, h);
 		activateAround(pos);
 		// a sponge (or double sponge) that went away gives its water back at once (not when a piston moves it)
-		if ((newProps == null || !newProps.holdsMoisture()) && !newState.is(net.minecraft.world.level.block.Blocks.MOVING_PISTON)
-				&& (io.github.nagsfov.ocwo.sponge.OcwoSponges.isSponge(oldState) || io.github.nagsfov.ocwo.sponge.OcwoSponges.isCompressed(oldState))) {
+		if (gone && (io.github.nagsfov.ocwo.sponge.OcwoSponges.isSponge(oldState) || io.github.nagsfov.ocwo.sponge.OcwoSponges.isCompressed(oldState))) {
 			io.github.nagsfov.ocwo.sponge.SpongeLogic.onSpongeGone(level, pos, h);
 		}
 	}
@@ -312,6 +324,13 @@ public final class MoistureSimulation {
 		int h = units(pos);
 		if (props == null || !props.holdsMoisture()) {
 			// The block can no longer hold moisture (mined, replaced): release it as water here or next to it.
+			if (h > 0 && !state.isAir() && state.isCollisionShapeFullBlock(level, pos) && level.getFluidState(pos).isEmpty()) {
+				// moisture left in a full block that holds none (stone of a world saved before 19/11/2026, or a block
+				// put over wet soil): it goes to the ground water of the zone instead of seeping out of the stone
+				io.github.nagsfov.ocwo.fluids.WaterReserves.get(level).giveUnits(level, pos, h);
+				setUnits(pos, 0);
+				return false;
+			}
 			return h > 0 && release(pos, h);
 		}
 		RandomSource random = level.getRandom();

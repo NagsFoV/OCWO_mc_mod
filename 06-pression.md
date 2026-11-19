@@ -15,7 +15,9 @@
 - Sauvegardé par chunk ; un chunk sans information a toute son eau au repos. Un chunk d'un monde existant où les joueurs sont déjà allés garde son eau en mouvement réveillée la première fois que cette version le voit.
 - Règle `ocwo:water_rest` (activée), commandes `/ocwo water info <rayon>` et `/ocwo water rest <rayon>`.
 
-**Réservoirs de zone** (`WaterReserves`, option choisie par Valentin) : quand l'écoulement prend de l'eau à de l'eau naturelle (au repos ou non) ou lui en verse, l'eau naturelle garde son niveau et la réserve de sa zone (4×4 chunks, sauvegardée) paie ou reçoit la différence. La réserve démarre au volume d'eau de la zone ; vide, l'eau naturelle baisse vraiment. Conservation exacte : eau visible plus réserves. Une tranchée creusée depuis une rivière se remplit sans vider la rivière. Affichée dans F3 et dans `/ocwo water info`.
+**Réservoirs de zone** (`WaterReserves`, option choisie par Valentin) : quand l'écoulement prend de l'eau à de l'eau naturelle (au repos ou non) ou lui en verse, l'eau naturelle garde son niveau et la réserve de sa zone (4×4 chunks, sauvegardée) paie ou reçoit la différence ; vide, l'eau naturelle baisse vraiment. Affichée dans F3 et dans `/ocwo water info`.
+
+**Depuis le 19/11/2026** (stabilisation, voir 03, « Registre d'eau par zone ») : la réserve démarre à 0 et non plus au volume d'eau de la zone, qui comptait l'eau deux fois. Elle ne contient que de l'eau qui était ailleurs avant (humidité de génération des blocs minés, eau versée dans l'eau naturelle). Une tranchée creusée depuis une rivière fait donc vraiment baisser la rivière, sauf si la réserve a de quoi payer. Les grandes masses d'eau au repos deviendront des réservoirs abstraits (étape 4 de la stabilisation).
 
 **Mesures** (monde régénéré à la graine de « New World test », 21×21 chunks autour du joueur, temps moyen par tick du serveur entier / 1 % des pires ticks) :
 

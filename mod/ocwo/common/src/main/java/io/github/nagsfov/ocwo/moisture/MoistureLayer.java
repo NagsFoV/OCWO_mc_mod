@@ -73,6 +73,15 @@ public final class MoistureLayer {
 		return sections.isEmpty();
 	}
 
+	/** Total moisture of the section of pos, in units (0 without an array). */
+	public long sectionTotal(ChunkAccess chunk, BlockPos pos) {
+		short[] s = sections.get(chunk.getSectionIndex(pos.getY()));
+		if (s == null) return 0;
+		long sum = 0;
+		for (short v : s) sum += v;
+		return sum;
+	}
+
 	/** Total moisture of the chunk, in units (tests). */
 	public long total() {
 		long sum = 0;
