@@ -57,6 +57,7 @@ océans, lacs et sols humides → évaporation → nuages poussés par le vent �
 | Tests en jeu | Validés en jeu par Valentin : les cascades (y compris celles qui se rencontrent) et les éponges | 2026-11-12 |
 | Tests en jeu : pression v2 | Validée en jeu par Valentin (hors couloir sous un lac, pas encore testé). Défauts d'affichage avec des shaders notés dans `05-problemes-connus.md`, non prioritaires | 2026-11-12 |
 | Rendu d'un bloc plein | Un bloc à 8 niveaux s'affiche à pleine hauteur quand l'eau ne peut pas monter dans le bloc du dessus (bloc ni air, ni remplaçable, ni waterloggable). Sinon, 8/9 de hauteur comme en vanilla. La même règle s'applique à la hauteur logique (entités, bateaux) et au rendu (demande de Valentin, remplace la décision précédente du même jour) | 2026-11-12 |
+| Évaporation de l'humidité | **Partout, même sous terre** : chaque transfert d'humidité (absorption, transmission) en perd une part qui monte aux nuages de la zone, 2 % en biome tempéré, moins au froid, plus au chaud et sec (règle `ocwo:moisture_evaporation`). Remplace la proposition « seulement pour l'eau qui voit le ciel ». Détail dans `03-humidite-et-etats-des-blocs.md`, « Évaporation » | 2026-11-19 |
 | Fusion des nuages | Les nuages fusionnent quand ils se rencontrent : un grand nuage qui couvre 100 blocs² vaut mieux que 100 petits. On garde en réserve l'idée de redécouper plus tard les grands nuages en plusieurs petits | 2026-11-11 |
 
 ## Base technique : PhysEx-Reborn
@@ -83,6 +84,5 @@ océans, lacs et sols humides → évaporation → nuages poussés par le vent �
 - Mécanismes vanilla : les valeurs exactes (capacité du chaudron, débit de la dripstone, contenu d'un seau, d'une fiole, d'une éponge...), dans les fichiers de données.
 - Conservation en multijoueur : que devient l'eau contenue dans l'inventaire d'un joueur qui se déconnecte ? (À traiter plus tard.)
 - Plus tard : un objet (« hygromètre ») pour afficher l'humidité. Simple accès à des données qui existent déjà côté serveur, sans impact sur l'architecture.
-- Évaporation : seulement pour l'eau qui voit le ciel ? Proposition : oui. Sous terre, l'eau ne s'évapore pas, ce qui garde les grottes (luxuriantes ou non) humides même sous un désert.
 - Eau souterraine : les réglages chiffrés (profondeur où commence l'évaporation, vitesse au contact de la bedrock, perméabilité de la deepslate).
 - Biomes : ils peuvent changer, rarement (commande `/fillbiome`, mods, éditeurs de monde). Le code doit relire le biome et recalculer le maximum des cases de temps en temps, au lieu de le figer.

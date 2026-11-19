@@ -80,7 +80,7 @@ Test : nouveau `CheckZoneSourceGameTests` (seul dans son lot) : l'eau sort au pi
 - **Anciennes réserves** : gardées telles quelles à la conversion (en unités). Elles contiennent l'eau comptée deux fois, mais aussi de la vraie eau versée dans l'eau naturelle, et on ne peut pas séparer les deux. À confirmer : les remettre à 0 dans les mondes existants.
 - **Ordre de paiement** : quand l'écoulement prend à de l'eau naturelle, la réserve de la zone paie d'abord (comme avant).
 - **Mesure de l'humidité de génération rendue** : ce qu'un bloc tiendrait au repos à sa place (même calcul que l'humidité de génération), plafonné à ce qu'il tient vraiment.
-- **Évaporation partout** : l'évaporation s'applique à chaque transfert, sous terre aussi. La question ouverte du document 01 (« seulement pour l'eau qui voit le ciel ? ») n'est pas tranchée : à décider.
+- **Évaporation partout** : l'évaporation s'applique à chaque transfert, sous terre aussi. **Décision de Valentin (19/11/2026) : on garde ça, même sous terre.** Notée dans le document 01 à la place de la proposition « seulement pour l'eau qui voit le ciel ».
 - **Transferts concernés** : absorption et transmission. Le suintement (un bloc saturé rend un niveau d'eau) n'évapore rien : c'est déjà de l'eau qui sort.
 - **Réservoirs : ordre de paiement** : la réserve de la zone d'abord, puis la masse d'eau elle-même. L'eau versée dans de l'eau naturelle va toujours à la réserve (la surface d'un lac ne remonte pas toute seule).
 - **Réservoirs : quels blocs baissent** : les blocs de surface les plus hauts, à égalité les plus proches de la sortie, jamais le bloc qui perd l'eau lui-même, seulement des blocs d'eau simples au repos (pas d'algues ni de blocs waterloggés).
@@ -97,7 +97,7 @@ Test : nouveau `CheckZoneSourceGameTests` (seul dans son lot) : l'eau sort au pi
 - Rien dans `main` avant son feu vert en jeu.
 
 **À décider** :
-- Évaporation sous terre : partout (comme maintenant) ou seulement pour l'eau qui voit le ciel (question ouverte du document 01).
+- Évaporation sous terre : **décidé le 19/11/2026, partout, même sous terre** (comportement actuel, rien à changer dans le code).
 - Réserves des mondes existants : gardées (décision confirmée par Valentin le 19/11/2026).
 - Page de classement : mettre sa base à jour avec les nouvelles valeurs des matériaux.
 - Branche : le travail est poussé sur `claude/project-thread-631nn1` (seule branche que cette session pouvait pousser) ; la branche locale s'appelle `stabilisation`.
