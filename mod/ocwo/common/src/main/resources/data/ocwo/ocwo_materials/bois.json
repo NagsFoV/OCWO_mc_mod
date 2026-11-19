@@ -1,7 +1,7 @@
 {
- "capacity": 4,
- "permeability": 2,
- "stages": true,
+ "capacity": 0,
+ "permeability": 0,
+ "stages": false,
  "retains": false,
  "blocks": [
   "minecraft:acacia_log",

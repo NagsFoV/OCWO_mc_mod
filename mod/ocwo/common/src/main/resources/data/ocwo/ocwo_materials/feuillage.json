@@ -1,6 +1,6 @@
 {
- "capacity": 1,
- "permeability": 6,
+ "capacity": 0,
+ "permeability": 0,
  "stages": false,
  "retains": false,
  "blocks": [

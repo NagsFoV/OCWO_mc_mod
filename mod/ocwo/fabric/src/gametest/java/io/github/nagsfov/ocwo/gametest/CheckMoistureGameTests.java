@@ -68,15 +68,15 @@ public class CheckMoistureGameTests {
 
 	// ------------------------------------------------------------------ scenarios
 
-	/** A cobblestone wall soaks up the pool and seeps into the dry chamber behind it. */
+	/** A gravel wall soaks up the pool and seeps into the dry chamber behind it. */
 	@GameTest(environment = "ocwo-gametest:moisture_fast", maxTicks = 3000, padding = 24)
-	public void cobblestoneWallSeeps(GameTestHelper h) {
-		poolAndWall(h, Blocks.COBBLESTONE.defaultBlockState());
+	public void gravelWallSeeps(GameTestHelper h) {
+		poolAndWall(h, Blocks.GRAVEL.defaultBlockState());
 		conservation(h, 8, 6, 4);
 		h.succeedWhen(() -> {
 			long seeped = liquid(h, 5, 1, 1, 7, 5, 3);
-			h.assertTrue(seeped > 0, "No water seeped through the cobblestone wall yet");
-			report(h, "cobblestoneWallSeeps", seeped + " levels seeped, wall moisture at (4,1,2) = "
+			h.assertTrue(seeped > 0, "No water seeped through the gravel wall yet");
+			report(h, "gravelWallSeeps", seeped + " levels seeped, wall moisture at (4,1,2) = "
 					+ WaterCount.moisture(h, new BlockPos(4, 1, 2)) + " units");
 		});
 	}
@@ -126,30 +126,16 @@ public class CheckMoistureGameTests {
 		});
 	}
 
-	/**
-	 * Basalt is directional (along its axis 4, across 0). Two compartments, each a pool over one basalt block over
-	 * a dry chamber: vertical basalt (axis Y) lets the water down; horizontal basalt (axis X) does not.
-	 */
-	@GameTest(environment = "ocwo-gametest:moisture_fast", maxTicks = 3000, padding = 24)
-	public void basaltIsDirectional(GameTestHelper h) {
-		// two columns of 1x1: x=1 (vertical basalt), x=3 (horizontal basalt), separated by obsidian
-		fill(h, 0, 0, 0, 4, 6, 2, Blocks.OBSIDIAN);
-		for (int x : new int[]{1, 3}) {
-			fill(h, x, 1, 1, x, 5, 1, Blocks.AIR);           // chamber y=1..2, basalt y=3, pool y=4..5
-			BlockState basalt = Blocks.BASALT.defaultBlockState()
-					.setValue(RotatedPillarBlock.AXIS, x == 1 ? Direction.Axis.Y : Direction.Axis.X);
-			h.setBlock(new BlockPos(x, 3, 1), basalt);
-			fill(h, x, 4, 1, x, 5, 1, Blocks.WATER);
-		}
-		conservation(h, 4, 6, 2);
-		h.succeedWhen(() -> {
-			long vertical = liquid(h, 1, 1, 1, 1, 2, 1);
-			long horizontal = liquid(h, 3, 1, 1, 3, 2, 1);
-			int hMoisture = WaterCount.moisture(h, new BlockPos(3, 3, 1));
-			h.assertTrue(horizontal == 0 && hMoisture == 0, "Horizontal basalt let water in (" + horizontal + " levels, "
-					+ hMoisture + " units)");
-			h.assertTrue(vertical > 0, "Vertical basalt let no water down yet");
-			report(h, "basaltIsDirectional", "vertical: " + vertical + " levels below, horizontal: dry");
+	/** Stone holds no water any more (reduced moisture materials, 18/11/2026): a cobblestone wall stays dry. */
+	@GameTest(environment = "ocwo-gametest:moisture_fast", maxTicks = 800, padding = 24)
+	public void cobblestoneHoldsNoWater(GameTestHelper h) {
+		poolAndWall(h, Blocks.COBBLESTONE.defaultBlockState());
+		conservation(h, 8, 6, 4);
+		h.runAfterDelay(600, () -> {
+			h.assertTrue(liquid(h, 5, 1, 1, 7, 5, 3) == 0, "Water went through cobblestone");
+			h.assertTrue(WaterCount.moisture(h, new BlockPos(4, 1, 2)) == 0, "Cobblestone holds moisture");
+			report(h, "cobblestoneHoldsNoWater", "no moisture, chamber dry");
+			h.succeed();
 		});
 	}
 

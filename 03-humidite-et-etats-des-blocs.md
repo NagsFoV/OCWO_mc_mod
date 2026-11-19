@@ -192,7 +192,7 @@ Les blocs deviennent actifs quand l'eau bouge à côté d'eux, quand un bloc por
 
 Avec les quotas fixes (15/11/2026), mesuré le même jour sur le même PC (chargé) pour comparer : avant, 6,0 ms en moyenne, 42 à 45 ms au pire tick ; après, 6,9 ms (dont 0,1 ms pour l'humidité), 39 à 57 ms au pire tick, 1 120 blocs de boue. Avec 2 000 blocs par passage, le pire tick montait à 70 ms : d'où la valeur de 500. Depuis la simulation complète (tous les blocs actifs à chaque pas) : 2,3 ms en moyenne, 1 152 blocs de boue ; le pire tick (157 ms) est au moment où le bassin est posé d'un coup. Avec les ticks aléatoires (16/11/2026), un bassin de 24×12 posé sur du sable et de la terre coûte 4,1 ms par tick pour tout le serveur ; après 2 minutes, le sable est humide (22/48 unités) et la terre encore sèche (15/96). Test `sandSoaksFasterThanDirt` : sable 77 % plein, terre 20 %, eau exacte.
 
-**Tests automatiques** (`CheckMoistureGameTests`, dans les tests courants) : mur de cobblestone qui suinte, laine qui retient, obsidienne étanche, terre sous un bassin qui devient boue, basalte directionnel. Chaque test vérifie à chaque tick que l'eau liquide plus l'humidité ne change pas. Les tests de pression sont désormais construits en obsidienne : avec de la pierre, une partie de l'eau passait dans les murs (comportement normal, mais qui faussait ces tests de pression).
+**Tests automatiques** (`CheckMoistureGameTests`, dans les tests courants) : mur de gravier qui suinte (cobblestone jusqu'au 19/11/2026), laine qui retient, obsidienne et cobblestone étanches, terre sous un bassin qui devient boue. Chaque test vérifie à chaque tick que l'eau liquide plus l'humidité ne change pas. Les tests de pression sont désormais construits en obsidienne : avec de la pierre, une partie de l'eau passait dans les murs (comportement normal, mais qui faussait ces tests de pression).
 
 ## Éponges (18/11/2026, branche `eponges`, à tester en jeu)
 
@@ -253,6 +253,18 @@ Le sens suit l'axe du piston : les modèles sont tournés selon la propriété `
 - moitié détruite.
 
 Chaque test vérifie la conservation exacte.
+
+## Stabilisation (19/11/2026, branche `stabilisation`)
+
+### Moins de matériaux humides
+
+Décision de Valentin : seuls les sols meubles et quelques blocs absorbants gardent une humidité. Les autres blocs pleins ne stockent plus rien et ne laissent plus passer l'eau.
+
+- **Gardent l'humidité** : terres (terre, herbe, podzol, terre labourée, nylium…), sable (et sable des âmes), gravier, argile et boue, mousse, laine, éponges, poudre de béton (elle doit pouvoir devenir du béton).
+- **Plus aucune humidité** (capacité 0, perméabilité 0) : roches denses et poreuses (pierre, cobblestone, deepslate, basalte, tuf, calcite, grès…), minerais et métaux, béton, briques et terres cuites, verre, bois, feuilles et blocs organiques. Les feuilles restent seulement waterloggables (eau dans le bloc, sans humidité).
+- La neige et la glace ne retenaient déjà pas d'humidité (blocs faits d'eau, traités plus tard avec leur eau fixe) : inchangé.
+
+Conséquences : un mur de cobblestone est étanche, comme l'obsidienne. Le test « mur qui suinte » se fait maintenant avec du gravier, et le test du basalte directionnel est retiré (le basalte ne prend plus d'eau). Nouveau test : `cobblestoneHoldsNoWater`.
 
 ## Questions ouvertes
 

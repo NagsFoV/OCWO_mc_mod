@@ -1,7 +1,7 @@
 {
- "capacity": 1,
- "permeability": 1,
- "stages": true,
+ "capacity": 0,
+ "permeability": 0,
+ "stages": false,
  "retains": false,
  "blocks": [
   "minecraft:andesite",
