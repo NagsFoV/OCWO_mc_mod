@@ -14,6 +14,9 @@ public abstract class ServerLevelMoistureMixin {
 
 	@Inject(method = "tickChunk", at = @At("TAIL"))
 	private void ocwo$moistureRandomTicks(LevelChunk chunk, int randomTickSpeed, CallbackInfo ci) {
-		CustomFluidTicks.get((ServerLevel) (Object) this).moisture().randomTickChunk(chunk);
+		ServerLevel level = (ServerLevel) (Object) this;
+		long t0 = io.github.nagsfov.ocwo.util.OcwoProfiler.isProfiling(level) ? System.nanoTime() : 0L;
+		CustomFluidTicks.get(level).moisture().randomTickChunk(chunk);
+		if (t0 != 0L) io.github.nagsfov.ocwo.util.OcwoProfiler.addSection(level, "hook: moisture random ticks", System.nanoTime() - t0);
 	}
 }

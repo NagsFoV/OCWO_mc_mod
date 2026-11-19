@@ -210,9 +210,14 @@ public final class FluidUtils {
 	}
 
 	public static void handleFluidTick(FlowingFluid ff, ServerLevel world, BlockPos blockPos, BlockState blockState, FluidState fluidState) {
+		long t0 = io.github.nagsfov.ocwo.util.OcwoProfiler.isProfiling(world) ? System.nanoTime() : 0L;
 		// water at rest gets no flow task, whoever asks (scheduled tick, end of the world generation...)
-		if (WaterRest.isResting(world, blockPos)) return;
+		if (WaterRest.isResting(world, blockPos)) {
+			if (t0 != 0L) io.github.nagsfov.ocwo.util.OcwoProfiler.addSection(world, "in fluid ticks: water at rest", System.nanoTime() - t0);
+			return;
+		}
 		new ClassicFlowTask(world, blockPos, ff, blockState, fluidState).run();
+		if (t0 != 0L) io.github.nagsfov.ocwo.util.OcwoProfiler.addSection(world, "in fluid ticks: flow task", System.nanoTime() - t0);
 	}
 
 	public static int getSlopeDistance(FlowingFluid fluid, LevelReader world) {

@@ -845,11 +845,28 @@ public final class WaterBodies {
 
 	/** Columns beyond the water simulation distance (or in unloaded chunks) are dropped: their water is frozen. */
 	private void sweepRange() {
-		for (Body b : bodies) {
+		for (Body b : new ArrayList<>(bodies)) {
+			boolean anyUsable = false;
+			List<Col> out = new ArrayList<>();
 			for (Col c : b.cols) {
-				BlockPos p = new BlockPos(c.x, c.yBot, c.z);
-				if (!usable(p)) pending.add(p.asLong());
+				if (usable(new BlockPos(c.x, c.yBot, c.z))) anyUsable = true;
+				else out.add(c);
 			}
+			if (out.isEmpty()) continue;
+			if (!anyUsable) {
+				// the whole body left the simulation (its chunks unloaded, or too far): dropped at once, not column by
+				// column (a body of a few thousand columns took 650 ms to take apart)
+				for (Col c : out) {
+					removeFromIndex(c);
+					c.removed = true;
+					c.adj.clear();
+				}
+				b.cols.clear();
+				b.dirty.clear();
+				dropBody(b);
+				continue;
+			}
+			for (Col c : out) pending.add(BlockPos.asLong(c.x, c.yBot, c.z));
 		}
 	}
 

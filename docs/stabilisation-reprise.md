@@ -132,3 +132,16 @@ Jar : celui du commit `3d3414a` (étapes 1 à 5 et éponges v2) est dans le prof
 - **Trois éponges bloquées** : les deux plus proches du piston sont compressées. Test `threeSpongesPressedAgainstThePiston`.
 - **Niveaux entiers** : partout (séchage, partage, absorption, séparation, compression, écrasement, objets) ; un reste de fraction part aux nuages. Le F3, `/ocwo moisture` et l'infobulle affichent le remplissage. L'eau reste rangée avec l'humidité des blocs : ce n'est pas pour le séchage, c'est le stockage par bloc déjà sauvegardé, déplacé par les pistons et compté par le registre.
 - Non vérifiable ici : l'affichage côté client (pas de jeu lancé). À regarder en jeu : un piston qui écrase une éponge devant une pierre, et le montage slime entre deux éponges.
+
+## Retours du 19/11 à 20:53, point B (branche `stabilisation-b`, partie de `eponges-v2`)
+
+### 4. Pics de calcul à la génération
+
+Mesuré par un test sans fenêtre sur du vrai terrain (`GenerationGameTests`, `gradlew :fabric:runGameTestGeneration`), avec et sans OCWO. Détail et tableau dans `06-pression.md`, « Génération de grandes zones ».
+
+- **Cause** : le sable et le gravier laissés au-dessus d'une grotte par la génération tombent dès que le chunk tourne ; ils réveillaient l'eau, et la mer inondait la grotte de proche en proche (20 000 à 34 000 tâches d'écoulement pendant un vol de 1 280 chunks).
+- **Corrigé** : un chunk neuf naît au repos, sa fin de génération comprise (ticks de bloc de ses 20 premiers ticks et ticks programmés par la génération, même en chaîne ; chutes commencées pendant la génération). La couche « repos » est posée quand le chunk commence à tourner (avant, près d'un joueur, un chunk neuf pouvait compter comme déjà habité et voir son eau en mouvement réveillée). Une masse de pression sortie de la zone simulée est oubliée d'un coup (un tick de 650 ms au déchargement).
+- **Chiffres** (vol de 1 280 chunks en 19,5 s, thread principal) : sans OCWO 3 153 et 3 263 ms ; OCWO avant 6 039 ms, 22 ticks de plus de 50 ms, pire 257 ms, notre code environ 3 000 ms ; OCWO après 3 149 à 3 530 ms, 4 à 6 ticks de plus de 50 ms (3 sans OCWO), notre code 167 à 204 ms, notre pire tick 9 à 22 ms. Déchargement : notre code 656 ms avant, 6 ms après.
+- **Choix faits seul** : 20 ticks pour la fin de génération d'un chunk (le sable tombe 2 ticks après sa naissance) ; l'eau déplacée par une chute de la génération monte dans sa colonne au repos (sans réveil), elle n'est ni perdue ni créée.
+- **Outils de test** : le serveur de test construit un monde normal et tourne à 20 ticks par seconde seulement avec `-Docwo.terrain=true` (lancement `gameTestGeneration`) ; le cadre de test, posé sous terre, ne réveille pas l'eau d'une nappe voisine dans ce lancement. Mesure de chaque partie de notre code dans `OcwoProfiler` (seulement pendant une mesure).
+- **Limite** : pas de joueur dans le test, donc rien sur le client.

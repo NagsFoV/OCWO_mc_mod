@@ -108,6 +108,24 @@ gradle.taskGraph.whenReady { graph ->
     }
 }
 
+// Cost of the world generation, on real terrain (normal world, seed 0): ./gradlew :fabric:runGameTestGeneration
+// To compare without OCWO, set fluidPhysicsEnabled to false in build/run/gameTestGeneration/config/ocwo/boot.jsonc.
+// Delete build/run/gameTestGeneration/world before each run: the chunks must be generated, not read from the disk.
+loom {
+    runs {
+        gameTestGeneration {
+            server()
+            name = 'Game Test (generation)'
+            source sourceSets.gametest
+            runDir 'build/run/gameTestGeneration'
+            ideConfigGenerated false
+            vmArg '-Dfabric-api.gametest'
+            vmArg '-Docwo.terrain=true'
+            vmArg '-Dfabric-api.gametest.filter=ocwo-gametest:generation_*'
+        }
+    }
+}
+
 // Series of communicating vessels (each case alone in its batch): ./gradlew :fabric:runGameTestVessels
 loom {
     runs {

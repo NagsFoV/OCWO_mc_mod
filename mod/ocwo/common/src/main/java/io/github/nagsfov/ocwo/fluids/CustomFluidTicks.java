@@ -170,6 +170,13 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		bodies.onChange(pos);
 	}
 
+	/** Chunks generated in the last ticks -> game time of their birth (see WaterRest.isNewborn). */
+	private final it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap newbornChunks = new it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap();
+
+	public it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap newbornChunks() {
+		return newbornChunks;
+	}
+
 	/**
 	 * Slow pressure trigger: stable but unbalanced bodies of fluid get no tick by themselves.
 	 * Every second, a few random fluid blocks near each player are checked (their body is built if unknown).
@@ -256,6 +263,7 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		// every flow task due at this tick (no limit), except for water at rest
 		final boolean rest = WaterRest.enabled(world);
 		WaterRest.simulating(true);
+		long s0 = profileStart != 0L ? System.nanoTime() : 0L;
 		try {
 			super.tick(time, Integer.MAX_VALUE, rest ? (pos, fluid) -> {
 				if (!WaterRest.isResting(world, pos)) biConsumer.accept(pos, fluid);
@@ -263,6 +271,7 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		} finally {
 			WaterRest.simulating(false);
 		}
+		if (s0 != 0L) OcwoProfiler.addSection(world, "tick: scheduled fluid ticks", System.nanoTime() - s0);
 		ProfilerFiller profiler = Profiler.get();
 
 		long d1 = debug ? System.nanoTime() : 0L;
@@ -283,12 +292,18 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 			lastDeferred = 0;
 			bodies.clearPending();
 		}
-		if (pressureStart != 0L) OcwoProfiler.addPressureNanos(world, System.nanoTime() - pressureStart);
+		if (pressureStart != 0L) {
+			OcwoProfiler.addPressureNanos(world, System.nanoTime() - pressureStart);
+			OcwoProfiler.addSection(world, "tick: pressure", System.nanoTime() - pressureStart);
+		}
+		long m0 = profileStart != 0L ? System.nanoTime() : 0L;
 		long d2 = debug ? System.nanoTime() : 0L;
 		profiler.popPush("block moisture");
 		moisture.tick();
 		// sponges removed without dropping an item give their water back (see SpongeLogic.onSpongeGone)
 		io.github.nagsfov.ocwo.sponge.SpongeLogic.tick(world);
+		if (m0 != 0L) OcwoProfiler.addSection(world, "tick: moisture and sponges", System.nanoTime() - m0);
+		long e0 = profileStart != 0L ? System.nanoTime() : 0L;
 		long d3 = debug ? System.nanoTime() : 0L;
 		profiler.popPush("fluid equalization");
 		// every equalization task queued before this pass (the ones they queue are for the next tick)
@@ -308,8 +323,11 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 		} finally {
 			WaterRest.simulating(false);
 		}
+		if (e0 != 0L) OcwoProfiler.addSection(world, "tick: equalization", System.nanoTime() - e0);
 		// awake water that has stopped moving goes back to rest
+		long r0 = profileStart != 0L ? System.nanoTime() : 0L;
 		int slept = WaterRest.sleepSweep(world);
+		if (r0 != 0L) OcwoProfiler.addSection(world, "tick: back to rest", System.nanoTime() - r0);
 		if (world.getGameTime() % 20 == 0) lastSlept = slept;
 		if (FluidUtils.FLUID_CHUNK_LAYER && !updatedFluidOverrides.isEmpty()) {
 			profiler.popPush("updating fluid chunks");

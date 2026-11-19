@@ -78,8 +78,12 @@ public final class WaterRest {
 		layer = Services.PLATFORM.getOrCreateWakeLayer(c);
 		layer.initialized = true;
 		c.markUnsaved();
-		if (!existing) return layer; // a new chunk: everything at rest
+		if (!existing) {
+			layer.fresh = true; // a new chunk: everything at rest
+			return layer;
+		}
 		// an existing chunk seen for the first time: its moving water (non-full or falling) stays awake
+		long t0 = io.github.nagsfov.ocwo.util.OcwoProfiler.isProfiling(level) ? System.nanoTime() : 0L;
 		long now = level.getGameTime();
 		int minY = c.getMinY();
 		LevelChunkSection[] sections = c.getSections();
@@ -97,7 +101,69 @@ public final class WaterRest {
 					}
 		}
 		if (layer.size() > 0) CustomFluidTicks.get(level).awakeChunks().add(c.getPos().pack());
+		if (t0 != 0L) io.github.nagsfov.ocwo.util.OcwoProfiler.addSection(level, "rest: first look at an existing chunk", System.nanoTime() - t0);
 		return layer;
+	}
+
+	/**
+	 * A chunk becomes a full chunk (end of its generation, or loaded from the disk): its layer is set now, before the
+	 * chunk ticks. A new chunk is born at rest, without any look at its blocks; only a chunk of a world saved before
+	 * this system (no layer, already inhabited) gets its one-time look. Done later, at the first question about its
+	 * water, a new chunk near a player would already count as inhabited and have its moving water woken.
+	 */
+	public static void onChunkPromoted(ServerLevel level, LevelChunk c) {
+		if (!enabled(level)) return;
+		WakeLayer layer = layer(level, c);
+		if (layer.fresh) {
+			// its first ticks (its layer may have been made a little earlier, by a question from a neighbour chunk)
+			layer.fresh = false;
+			CustomFluidTicks.get(level).newbornChunks().put(c.getPos().pack(), level.getGameTime());
+		}
+	}
+
+	/** Ticks after the birth of a chunk during which its block ticks are the end of its generation (see isNewborn). */
+	public static final int NEWBORN_TICKS = 20;
+
+	/**
+	 * Is pos in a chunk generated less than {@link #NEWBORN_TICKS} ticks ago? Its block ticks then belong to the
+	 * world generation (sand and gravel left above a cave fall as soon as the chunk ticks, 2 ticks after its birth):
+	 * the changes they make do not wake the water, so that a new chunk is born at rest.
+	 */
+	public static boolean isNewborn(ServerLevel level, BlockPos pos) {
+		var newborn = CustomFluidTicks.get(level).newbornChunks();
+		if (newborn.isEmpty()) return false;
+		long key = net.minecraft.world.level.ChunkPos.pack(pos);
+		long born = newborn.getOrDefault(key, Long.MIN_VALUE);
+		if (born == Long.MIN_VALUE) return false;
+		if (level.getGameTime() - born < NEWBORN_TICKS) return true;
+		newborn.remove(key);
+		return false;
+	}
+
+	/** Are the block changes of the moment part of the world generation (they wake no water)? */
+	public static boolean isSuppressed() {
+		return suppressed > 0;
+	}
+
+	/** Block ticks scheduled by the world generation: position -> game time they are due (see takeGenerationTick). */
+	private static final it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap GENERATION_TICKS = new it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap();
+
+	/** A block tick was scheduled while the block changes belong to the world generation. */
+	public static void onGenerationTickScheduled(BlockPos pos, long due) {
+		GENERATION_TICKS.put(pos.asLong(), due);
+	}
+
+	/**
+	 * Does the block tick about to run at pos belong to the world generation (scheduled by the end of the generation
+	 * of a chunk, or by another such tick)? Then its changes do not wake the water: a neighbour chunk born later
+	 * makes the sand of an older chunk fall, a pile of sand falls block after block.
+	 */
+	public static boolean takeGenerationTick(BlockPos pos) {
+		if (GENERATION_TICKS.isEmpty()) return false;
+		long key = pos.asLong();
+		if (!GENERATION_TICKS.containsKey(key)) return false;
+		GENERATION_TICKS.remove(key);
+		return true;
 	}
 
 	/** Is the fluid at pos at rest? (false where there is no fluid, or when the rule is off) */
@@ -131,6 +197,7 @@ public final class WaterRest {
 		if (c == null) return;
 		WakeLayer layer = layer(level, c);
 		if (layer.add(pos, level.getGameTime())) {
+			io.github.nagsfov.ocwo.util.OcwoProfiler.addSection(level, "rest: water woken", 0L);
 			c.markUnsaved();
 			CustomFluidTicks.get(level).awakeChunks().add(c.getPos().pack());
 			if (traceAt != null && traceAt.equals(pos)) new Throwable("[OCWO] water woken at " + pos.toShortString()).printStackTrace(System.out);
@@ -199,6 +266,9 @@ public final class WaterRest {
 		long now = level.getGameTime();
 		if (now % SLEEP_SWEEP_PERIOD != 0 || !enabled(level)) return 0;
 		CustomFluidTicks ticks = CustomFluidTicks.get(level);
+		// chunks no longer new, generation ticks that never ran (chunk unloaded, block changed)
+		ticks.newbornChunks().values().removeIf(born -> now - born >= NEWBORN_TICKS);
+		if (!GENERATION_TICKS.isEmpty()) GENERATION_TICKS.values().removeIf(due -> now - due > SLEEP_TICKS);
 		LongLinkedOpenHashSet chunks = ticks.awakeChunks();
 		int slept = 0;
 		LongArrayList done = new LongArrayList();

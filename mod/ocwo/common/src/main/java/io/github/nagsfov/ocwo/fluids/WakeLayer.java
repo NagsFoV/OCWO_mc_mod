@@ -27,6 +27,8 @@ public final class WakeLayer {
 	final it.unimi.dsi.fastutil.longs.LongOpenHashSet touched = new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
 	/** The chunk was looked at once by this version (existing worlds: its moving water was woken then). */
 	boolean initialized;
+	/** Made for a new chunk that has not ticked yet (not saved: see WaterRest.onChunkPromoted). */
+	transient boolean fresh;
 
 	/** Position inside the chunk: y (full range), z and x (0..15). */
 	static long key(BlockPos pos) {

@@ -52,11 +52,14 @@ public abstract class WorldFluidsMixin {
 		}
 		BlockState oldState = chunk.setBlockState(blockPos, blockState, flags);
 		if (!isClientSide() && oldState != null) {
+			ServerLevel sl = (ServerLevel) (Object) this;
+			long t0 = io.github.nagsfov.ocwo.util.OcwoProfiler.isProfiling(sl) ? System.nanoTime() : 0L;
 			io.github.nagsfov.ocwo.fluids.CustomFluidTicks ticks = io.github.nagsfov.ocwo.fluids.CustomFluidTicks.get((Level) (Object) this);
 			ticks.moisture().onBlockChanged(blockPos, oldState, blockState);
-			io.github.nagsfov.ocwo.fluids.WaterRest.onBlockChanged((net.minecraft.server.level.ServerLevel) (Object) this, blockPos, oldState, blockState);
-			io.github.nagsfov.ocwo.fluids.WaterReserves.onBlockChanged((net.minecraft.server.level.ServerLevel) (Object) this, blockPos, oldState, blockState);
+			io.github.nagsfov.ocwo.fluids.WaterRest.onBlockChanged(sl, blockPos, oldState, blockState);
+			io.github.nagsfov.ocwo.fluids.WaterReserves.onBlockChanged(sl, blockPos, oldState, blockState);
 			ticks.onBlockChanged(blockPos);
+			if (t0 != 0L) io.github.nagsfov.ocwo.util.OcwoProfiler.addSection(sl, "hook: block changes", System.nanoTime() - t0);
 		}
 		//noinspection ConstantValue
 		if (check) {

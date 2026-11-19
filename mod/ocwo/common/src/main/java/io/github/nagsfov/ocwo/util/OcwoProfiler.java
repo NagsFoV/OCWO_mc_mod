@@ -28,12 +28,46 @@ public final class OcwoProfiler {
 	private OcwoProfiler() {
 	}
 
+	/** Named parts of our code (time and calls), while profiling (measurements of the world generation). */
+	private static final java.util.Map<String, long[]> SECTIONS = new java.util.TreeMap<>();
+
+	/** Adds the time of one call of a named part of our code. */
+	public static void addSection(ServerLevel level, String name, long nanos) {
+		if (!isProfiling(level)) return;
+		long[] s = SECTIONS.computeIfAbsent(name, k -> new long[3]);
+		s[0] += nanos;
+		s[1]++;
+		if (nanos > s[2]) s[2] = nanos;
+	}
+
+	/** "name: N ms (calls, worst call)" for each named part, since the profiling started. */
+	public static String sectionsReport() {
+		StringBuilder sb = new StringBuilder();
+		for (var e : SECTIONS.entrySet()) {
+			long[] v = e.getValue();
+			sb.append(String.format(java.util.Locale.ROOT, "%s: %.1f ms (%d calls, worst %.1f ms); ", e.getKey(), v[0] / 1e6, v[1], v[2] / 1e6));
+		}
+		return sb.toString();
+	}
+
+	/**
+	 * Total time of our code, in milliseconds: the parts named "tick: ..." (our fluid tick) and "hook: ..." (our code
+	 * called by the game). The other parts are inside them.
+	 */
+	public static double sectionsMillis() {
+		long s = 0;
+		for (var e : SECTIONS.entrySet())
+			if (e.getKey().startsWith("tick:") || e.getKey().startsWith("hook:")) s += e.getValue()[0];
+		return s / 1e6;
+	}
+
 	/** Water code time of the last profiled tick, in milliseconds (diagnostics). */
 	public static double lastMillis() {
 		return lastNanos / 1e6;
 	}
 
 	public static void start(ServerLevel level) {
+		SECTIONS.clear();
 		pendingNanos = 0;
 		ticks = 0;
 		sumNanos = 0;

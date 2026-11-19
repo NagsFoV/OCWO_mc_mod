@@ -65,6 +65,35 @@ Monde existant (copie de « New World test » après les sessions de Valentin) :
 
 **Tests** : eau générée immobile, perturbation locale, conservation sans repos, rendormissement, réservoir avec conservation exacte (eau visible + réserve).
 
+## Génération de grandes zones (19/11/2026, branche `stabilisation-b`, point 4)
+
+**Le problème** (Valentin, 19/11 à 20:53) : des pics de calcul quand on génère de larges zones, sans rien modifier. Mesuré par un test sans fenêtre sur du vrai terrain : le sable et le gravier laissés par la génération au-dessus d'une grotte (fond de la mer surtout) tombent dès que le chunk commence à tourner. Leur départ réveillait l'eau voisine, leur chute déplaçait de l'eau : l'eau de mer se mettait à inonder la grotte, et l'inondation se propageait d'un bloc réveillé à l'autre (20 000 à 34 000 tâches d'écoulement pendant le vol mesuré). Vanilla fait tomber ce sable aussi, mais son eau infinie ne coûte presque rien.
+
+**Ce qui change** : un chunk neuf naît au repos, sa fin de génération comprise.
+- Ses ticks de bloc pendant ses 20 premiers ticks, et tous les ticks de bloc programmés par la fin de génération (y compris en chaîne : une pile de sable tombe bloc par bloc, chaque chute programmant la suivante), ne réveillent pas l'eau (`WaterRest.isNewborn`, `takeGenerationTick`).
+- Un bloc qui commence à tomber pendant la génération atterrit sans réveiller l'eau ; l'eau qu'il déplace monte dans sa colonne, au repos (elle comble souvent le trou laissé par le sable).
+- La couche « repos » d'un chunk est posée quand il commence à tourner, et le chunk compte comme neuf jusque-là. Avant, elle était posée à la première question sur son eau ; près d'un joueur, le chunk comptait alors déjà comme habité, et son eau en mouvement (cascades de grotte, bords de rivière) était réveillée comme celle d'un monde d'avant OCWO.
+- Une masse de pression dont tout est sorti de la zone simulée (chunks déchargés ou trop loin) est oubliée d'un coup, au lieu d'être démontée colonne par colonne : un seul tick de 650 ms au déchargement.
+
+Eau qui se réveille encore à la génération : la glace qui se forme sur l'eau par temps froid (vanilla aussi), quelques blocs par minute.
+
+**Mesure** : `GenerationGameTests` (`gradlew :fabric:runGameTestGeneration`, à part). Le serveur de test construit un monde normal (graine 0) au lieu de son monde plat et tourne à 20 ticks par seconde comme un vrai serveur. Une bande de 32 chunks de large avance comme un vol rapide : une rangée de 32 chunks demandée toutes les 10 ticks (64 chunks par seconde), sans l'attendre, les rangées à plus de 12 derrière lâchées ; 1 280 chunks au total, puis 200 ticks avec les 384 derniers chargés, puis 200 ticks de déchargement. Avec et sans la partie eau d'OCWO (`boot.jsonc`), à partir d'un monde neuf à chaque fois. Temps du thread principal pendant le vol (19,5 s) :
+
+| | Sans OCWO | OCWO avant | OCWO après |
+|---|---|---|---|
+| Thread principal, total | 3 153 et 3 263 ms | 6 039 et 5 993 ms | 3 530 et 3 149 ms |
+| Ticks de plus de 50 ms / de plus de 100 ms | 3 / 0 (deux essais) | 22 / 13, puis 22 / 10 | 6 / 2, puis 4 / 0 |
+| Pire tick | 63 et 98 ms | 257 et 244 ms | 166 et 72 ms |
+| Notre code (crochets et tick de l'eau) | - | environ 3 000 ms | 204 et 167 ms |
+| dont tâches d'écoulement | - | 19 554 et 25 059 tâches (1 982 et 1 945 ms) | 3 et 4 tâches |
+| Notre pire tick de l'eau | - | 232 ms | 22 et 9 ms |
+| Les 384 derniers chunks gardés 200 ticks : notre code | - | 370 ms (pire tick 179 ms) | 31 et 30 ms |
+| Déchargement : notre code / pire tick du serveur | - / 54 et 56 ms | 656 ms / 651 ms | 6 ms / 60 et 51 ms |
+
+Les pires ticks qui restent (jusqu'à 166 ms dans un essai) ne viennent pas de notre code (notre pire tick de l'eau : 22 ms) : ce sont les pics de la génération vanilla, qui varient d'un essai à l'autre. Ce qui reste à OCWO pendant le vol (170 à 200 ms sur 19,5 s, moins de 1 ms par tick) : ticks d'humidité des chunks qui tournent (environ 50 ms, coût permanent, pas propre à la génération), crochets des changements de blocs (36 à 49 ms pour 60 000 changements), pression qui regarde ces changements (37 à 46 ms), ticks d'eau de la génération écartés parce que l'eau est au repos (17 à 24 ms pour 146 000 ticks).
+
+Limite de la mesure : pas de joueur dans le test (les chunks sont forcés), donc rien sur le client (construction des chunks à l'affichage) ni sur la part du temps d'un joueur qui se déplace.
+
 ## Simulation complète à chaque tick (15/11/2026, branche `simulation-complete`)
 
 **Décision de Valentin** : rien n'avance tant que la simulation du tick n'est pas finie, comme une explosion de TNT. Chaque tick fait en entier tout le travail d'eau dû à ce tick ; s'il est lourd, le jeu ralentit. L'eau garde sa vitesse physique (niveaux par tick, accélération ×4) : un grand vase met toujours du temps à s'équilibrer, mais c'est de l'écoulement, pas du calcul reporté. **L'ampleur se règle par la distance de simulation de l'eau**, pas par des quotas. Si un cas reste trop lourd, on simplifie le système plutôt que de remettre des calculs en attente.

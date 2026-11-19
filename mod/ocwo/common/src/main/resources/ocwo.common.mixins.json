@@ -32,7 +32,9 @@
 		"_fluids.FlowingFluidCeilingMixin",
 		"GameRuleMapMixin",
 		"_fluids.LevelChunkRestMixin",
-		"_fluids.ServerLevelMoistureMixin"
+		"_fluids.ServerLevelMoistureMixin",
+		"_fluids.ServerLevelRestMixin",
+		"_fluids.LevelTicksRestMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

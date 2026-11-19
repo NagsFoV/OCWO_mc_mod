@@ -19,9 +19,13 @@
 			"io.github.nagsfov.ocwo.gametest.CheckZoneSourceGameTests",
 			"io.github.nagsfov.ocwo.gametest.PerformanceGameTests",
 			"io.github.nagsfov.ocwo.gametest.ToolsGameTests",
-			"io.github.nagsfov.ocwo.gametest.VesselsGameTests"
+			"io.github.nagsfov.ocwo.gametest.VesselsGameTests",
+			"io.github.nagsfov.ocwo.gametest.GenerationGameTests"
 		]
 	},
+	"mixins": [
+		"ocwo-gametest.mixins.json"
+	],
 	"depends": {
 		"ocwo": "*",
 		"fabric-gametest-api-v1": "*"
