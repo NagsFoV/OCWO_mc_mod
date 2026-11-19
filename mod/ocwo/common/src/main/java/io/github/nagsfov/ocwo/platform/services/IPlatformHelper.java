@@ -84,6 +84,9 @@ public interface IPlatformHelper {
 
 	void sendDebug(net.minecraft.server.level.ServerPlayer player, io.github.nagsfov.ocwo.debug.DebugPayload payload);
 
+	/** How much wetter than at their generation visible blocks are, for the darkening of wet blocks (see WetSync). */
+	void sendWetBlocks(net.minecraft.server.level.ServerPlayer player, io.github.nagsfov.ocwo.moisture.WetBlocksPayload payload);
+
 	/** The reservoirs around a player who turned their display on ({@code /ocwo debug reservoirs}). */
 	void sendReservoirView(net.minecraft.server.level.ServerPlayer player, io.github.nagsfov.ocwo.debug.ReservoirViewPayload payload);
 

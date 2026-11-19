@@ -153,3 +153,20 @@ Mesuré par un test sans fenêtre sur du vrai terrain (`GenerationGameTests`, `g
 - **Choix faits seul** : une commande plutôt qu'une touche de débogage (pas de nouvelle combinaison F3 à retenir, et rien à changer côté clavier). Des particules plutôt que des contours (rien à dessiner, compatible Sodium). Le sol saturé à son humidité de génération n'est pas montré : sous le niveau de la mer, il l'est partout.
 - **Test** : `reservoirLinesAndView` (un lac naturel de 4×4 est vu comme un réservoir de 16 blocs de surface, un bloc de gravier saturé comme un amas d'un bloc avec son débouché, l'affichage contient les 16 blocs et le gravier, le paquet passe intact, réservé aux opérateurs).
 - **Non vérifié ici** : l'affichage côté client (pas de jeu lancé). À regarder en jeu : F3+F6 → `ocwo_reservoirs`, puis `/ocwo debug reservoirs` près d'un lac.
+
+### 7. Assombrissement des blocs humides
+
+Détail dans `03-humidite-et-etats-des-blocs.md`, « Rendu visuel des stades d'humidité », « Ce qui est fait ».
+
+- **Ce qui est assombri** : un bloc de sol humide visible, selon le nombre de stades dont il est plus humide qu'à sa génération (3 crans, de ×0,86 à ×0,64). Un bloc à son humidité de génération garde son aspect vanilla.
+- **Envoi** : seulement les blocs visibles des sections touchées par la simulation, avec le chunk puis seulement à chaque changement d'écart, aux joueurs qui voient le chunk.
+- **Rendu** : couleur multipliée à la construction du maillage, en vanilla (`ModelBlockRenderer`) et avec Sodium 0.9.2 (`BlockRenderer`, sans dépendance à Sodium). Rien par image.
+- **Coût** : pour un bassin de 12×12 qui imbibe la terre pendant 30 s, 13 000 à 15 000 changements d'humidité donnent 700 à 1 100 envois. Notre code d'envoi prend moins de 10 ms en tout. La liste d'un chunk humide se fait en 0,34 ms.
+- **Choix faits seul** : l'écart à la génération plutôt que le stade brut. Le stade brut assombrirait presque tout le terrain : toute la terre des biomes pluvieux est humide dès la génération, et tout le sol sous la mer est saturé. Il obligerait aussi à envoyer bien plus de données. Ensuite, un assombrissement gris, sans teinte bleue : Sodium ne donne qu'une luminosité par sommet, et le même rendu des deux côtés me semblait préférable. Enfin, rien de plus clair pour un bloc plus sec qu'à sa génération.
+- **Tests** : `wetBlocksSentOnlyWhenVisibleAndChanged` vérifie que seuls les blocs visibles sont envoyés, seulement au changement de stade, avec le bon écart. Il vérifie aussi qu'un bloc découvert est envoyé, qu'un bloc remplacé revient à 0, la liste avec le chunk et l'encodage. `wetSyncCost` sert à la mesure ci-dessus.
+- **Non vérifié ici** : l'affichage (pas de jeu lancé). À regarder en jeu, avec et sans Sodium : un bassin posé sur de la terre ou du sable, puis la terre qu'on découvre en creusant à côté.
+
+### Reste du point B
+
+- **5. Boucle lac → humidité → source** : pas encore codé. La règle par défaut couperait aussi les sources de pente de l'étape 5, parce que la pluie ne mouille pas encore le sol. J'ai donc proposé un choix : A, l'eau venue d'un plan d'eau ne sort jamais en source ; ou B, une source sort toujours au moins 1 bloc plus bas que le bloc qui suinte, et jamais dans une eau déjà là. J'attends la réponse.
+- **Jar** : celui de `5d055ce` (éponges v2, point A) est construit. Son installation dans le profil a été refusée par le contrôle des permissions, faute d'un « oui » de Valentin dans mon fil. Le profil a toujours `3d3414a`.

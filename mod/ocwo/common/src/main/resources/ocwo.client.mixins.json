@@ -17,6 +17,8 @@
 		"_fluids._layer.SectionCopyFluidMixin",
 		"_fluids.FluidCeilingRenderMixin",
 		"_fluids._debug.DebugScreenEntriesInvoker",
-		"_fluids._debug.DebugScreenEntryListMixin"
+		"_fluids._debug.DebugScreenEntryListMixin",
+		"_fluids._wet.ModelBlockRendererWetMixin",
+		"_fluids._wet.SodiumBlockRendererWetMixin"
 	]
 }

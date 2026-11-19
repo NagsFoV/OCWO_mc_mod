@@ -157,6 +157,8 @@ public class FabricPlatformHelper implements IPlatformHelper {
 				.register(io.github.nagsfov.ocwo.debug.DebugPayload.TYPE, io.github.nagsfov.ocwo.debug.DebugPayload.STREAM_CODEC);
 		net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry.clientboundPlay()
 				.register(io.github.nagsfov.ocwo.debug.ReservoirViewPayload.TYPE, io.github.nagsfov.ocwo.debug.ReservoirViewPayload.STREAM_CODEC);
+		net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry.clientboundPlay()
+				.register(io.github.nagsfov.ocwo.moisture.WetBlocksPayload.TYPE, io.github.nagsfov.ocwo.moisture.WetBlocksPayload.STREAM_CODEC);
 		net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry.serverboundPlay()
 				.register(io.github.nagsfov.ocwo.debug.DebugSubscribePayload.TYPE, io.github.nagsfov.ocwo.debug.DebugSubscribePayload.STREAM_CODEC);
 		net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.registerGlobalReceiver(io.github.nagsfov.ocwo.debug.DebugSubscribePayload.TYPE,
@@ -168,6 +170,13 @@ public class FabricPlatformHelper implements IPlatformHelper {
 	@Override
 	public void sendDebug(net.minecraft.server.level.ServerPlayer player, io.github.nagsfov.ocwo.debug.DebugPayload payload) {
 		if (net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.canSend(player, io.github.nagsfov.ocwo.debug.DebugPayload.TYPE)) {
+			net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(player, payload);
+		}
+	}
+
+	@Override
+	public void sendWetBlocks(net.minecraft.server.level.ServerPlayer player, io.github.nagsfov.ocwo.moisture.WetBlocksPayload payload) {
+		if (net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.canSend(player, io.github.nagsfov.ocwo.moisture.WetBlocksPayload.TYPE)) {
 			net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking.send(player, payload);
 		}
 	}

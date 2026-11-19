@@ -60,6 +60,11 @@ public final class MoistureLayer {
 		s[cell(pos)] = (short) Math.max(0, Math.min(Short.MAX_VALUE, units));
 	}
 
+	/** The cells of a section (index y << 8 | z << 4 | x), or null: read only (a quick scan of a whole section). */
+	public short[] sectionCells(int index) {
+		return sections.get(index);
+	}
+
 	/** Section indexes that have an array (random ticks). */
 	public int[] sectionIndexes() {
 		return sections.keySet().toIntArray();

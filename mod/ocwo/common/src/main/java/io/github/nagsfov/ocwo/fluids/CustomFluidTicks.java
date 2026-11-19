@@ -365,6 +365,8 @@ public class CustomFluidTicks extends LevelTicks<Fluid> {
 			debugPressureMs = ema(debugPressureMs, d2 - d1);
 			debugMoistureMs = ema(debugMoistureMs, d3 - d2);
 		}
+		// the blocks whose darkening changed this tick, to the players who see them
+		io.github.nagsfov.ocwo.moisture.WetSync.flush(world);
 		io.github.nagsfov.ocwo.debug.OcwoDebug.tick(world);
 	}
 }

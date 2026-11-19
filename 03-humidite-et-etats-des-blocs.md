@@ -124,6 +124,14 @@ Objectif : voir qu'un bloc est sec, humide ou trempé, sans alourdir le jeu.
 
 Alternatives écartées : une texture par stade (multiplie les états de bloc) et une teinte via `BlockColor` (ne s'applique qu'aux faces prévues pour la teinte, comme l'herbe : il faudrait réécrire les modèles vanilla, ce qui entre en conflit avec les packs de ressources).
 
+### Ce qui est fait (19/11/2026, branche `stabilisation-b`, à voir en jeu)
+
+- **Écart à la génération** : un bloc est assombri selon le nombre de stades dont il est plus humide qu'à sa génération (0 à 3 : 1, ×0,86, ×0,74, ×0,64). Un bloc à son humidité de génération garde son aspect vanilla. Sinon, toute la terre des biomes où il pleut (humide dès la génération) et tout le sol sous le niveau de la mer (saturé) seraient assombris. Il faudrait alors aussi envoyer l'humidité de tout le terrain, ou recalculer chez le client l'humidité de génération (matériaux, biome, profondeur) pour chaque bloc. Dans un désert (sec à la génération), l'écart est le stade lui-même.
+- **Envoi** (`WetSync`) : seulement les sections que la simulation a touchées (celles qui ont un tableau d'humidité ; ailleurs l'écart vaut 0). Seulement les blocs visibles (au moins une face contre un bloc qui ne la cache pas, l'eau comprise). Avec un chunk envoyé au joueur, ses blocs visibles plus humides. Ensuite, seulement quand l'écart d'un bloc visible change : son stade change, son bloc change, ou il est découvert. Regroupé par chunk, envoyé à la fin du tick aux seuls joueurs qui voient le chunk.
+- **Assombrissement** : à la construction du maillage, une seule fois par reconstruction, rien par image. Sans Sodium, la couleur de chaque face du bloc est multipliée dans `ModelBlockRenderer`. Avec Sodium, la luminosité de chaque sommet est multipliée dans son `BlockRenderer`. Ce mixin est écrit pour Sodium 0.9.2, sans dépendre de Sodium : il ne s'applique que si Sodium est là, et il est sauté si son code change. Une section dont un bloc change d'écart est reconstruite.
+- **Coût mesuré** (test `wetSyncCost`, bassin de 12×12 sur de la terre, humidité rapide, 600 ticks) : 13 000 à 15 000 changements d'humidité. Seulement 700 à 1 100 écarts envoyés. Notre code d'envoi : 6 à 8 ms en tout pour les changements, 1,2 à 1,5 ms pour les envois de fin de tick. La liste d'un chunk de 199 blocs visibles humides : 0,34 ms.
+- **Non vérifié ici** : l'affichage lui-même (pas de jeu lancé). Les tests vérifient ce que le serveur envoie, l'encodage du paquet et la cible des deux mixins (outil de contrôle des mixins).
+
 ## Classification des blocs par matériau (en cours, 12/11/2026)
 
 **Principe** : chaque bloc reçoit un **matériau** (environ 24) qui porte ses propriétés d'eau. On ne règle bloc par bloc que les exceptions.

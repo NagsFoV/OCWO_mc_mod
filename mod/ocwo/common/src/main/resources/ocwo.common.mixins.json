@@ -34,7 +34,8 @@
 		"_fluids.LevelChunkRestMixin",
 		"_fluids.ServerLevelMoistureMixin",
 		"_fluids.ServerLevelRestMixin",
-		"_fluids.LevelTicksRestMixin"
+		"_fluids.LevelTicksRestMixin",
+		"_fluids.PlayerChunkSenderWetMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

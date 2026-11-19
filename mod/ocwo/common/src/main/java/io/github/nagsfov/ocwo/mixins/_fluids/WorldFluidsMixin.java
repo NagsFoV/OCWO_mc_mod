@@ -59,6 +59,7 @@ public abstract class WorldFluidsMixin {
 			io.github.nagsfov.ocwo.fluids.WaterRest.onBlockChanged(sl, blockPos, oldState, blockState);
 			io.github.nagsfov.ocwo.fluids.WaterReserves.onBlockChanged(sl, blockPos, oldState, blockState);
 			ticks.onBlockChanged(blockPos);
+			io.github.nagsfov.ocwo.moisture.WetSync.onBlockChanged(sl, ticks.moisture(), blockPos, oldState, blockState);
 			if (t0 != 0L) io.github.nagsfov.ocwo.util.OcwoProfiler.addSection(sl, "hook: block changes", System.nanoTime() - t0);
 		}
 		//noinspection ConstantValue

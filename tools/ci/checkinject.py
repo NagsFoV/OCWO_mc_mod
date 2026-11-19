@@ -51,6 +51,8 @@ for root, _, files in os.walk(src):
         code = open(os.path.join(root, f), encoding='utf-8').read()
         code = re.sub(r'/\*.*?\*/', '', code, flags=re.S)
         code = re.sub(r'//[^\n]*', '', code)
+        if '@Pseudo' in code:
+            continue  # a mixin into another mod (Sodium...): not in the Minecraft jar
         m = re.search(r'@Mixin\(\{?([^)}]*)\}?\)', code)
         if not m:
             continue

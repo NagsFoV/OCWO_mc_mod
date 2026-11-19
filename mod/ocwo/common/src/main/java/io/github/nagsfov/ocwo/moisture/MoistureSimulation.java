@@ -115,8 +115,14 @@ public final class MoistureSimulation {
 	public void setUnits(BlockPos pos, int units) {
 		LevelChunk chunk = level.getChunkAt(pos);
 		ensureSection(chunk, pos);
-		Services.PLATFORM.getOrCreateMoistureLayer(chunk).set(chunk, pos, units);
+		MoistureLayer layer = Services.PLATFORM.getOrCreateMoistureLayer(chunk);
+		int before = layer.get(chunk, pos);
+		layer.set(chunk, pos, units);
 		chunk.markUnsaved();
+		// the darkening of wet blocks on the clients (only when its stage changes)
+		long w0 = OcwoProfiler.isProfiling(level) ? System.nanoTime() : 0L;
+		WetSync.onUnitsChanged(level, this, pos, before, layer.get(chunk, pos));
+		if (w0 != 0L) OcwoProfiler.addSection(level, "in moisture: wet step changes", System.nanoTime() - w0);
 	}
 
 	/** The section of pos gets its array, filled with the equilibrium of its blocks (no water created or lost). */

@@ -20,7 +20,8 @@
 			"io.github.nagsfov.ocwo.gametest.PerformanceGameTests",
 			"io.github.nagsfov.ocwo.gametest.ToolsGameTests",
 			"io.github.nagsfov.ocwo.gametest.VesselsGameTests",
-			"io.github.nagsfov.ocwo.gametest.GenerationGameTests"
+			"io.github.nagsfov.ocwo.gametest.GenerationGameTests",
+			"io.github.nagsfov.ocwo.gametest.CheckWetSyncGameTests"
 		]
 	},
 	"mixins": [
