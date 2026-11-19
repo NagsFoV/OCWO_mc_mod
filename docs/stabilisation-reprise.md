@@ -123,3 +123,5 @@ Choix faits seul (en plus des choix par défaut de l'assistant du projet) :
 - **Partage** : en proportion de la contenance (une éponge étirée compte double), les éponges compressées n'y participent pas.
 - **Cases libérées** : quand une éponge étirée ou compressée change de forme ou casse, l'eau rejetée peut aller dans la case qu'elle vient de libérer (sauf quand un bloc poussé va l'occuper).
 - **Mode serveur seul** (sans le mod chez les joueurs) : pas de composant d'objet, une éponge cassée rend son eau autour d'elle comme avant.
+
+Jar : celui du commit `3d3414a` (étapes 1 à 5 et éponges v2) est dans le profil Modrinth depuis le 19/11/2026 à 12:27, avec l'accord de Valentin. Le précédent (`9fc4450`) est gardé dans `profiles\Fabric 26.3\ocwo-anciens-jars`.
