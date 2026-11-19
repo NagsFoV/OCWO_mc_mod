@@ -88,3 +88,23 @@ Test : nouveau `CheckZoneSourceGameTests` (seul dans son lot) : l'eau sort au pi
 - **Sources : « tant qu'il touche la zone »** compris comme « tant que le débouché touche un bloc du sol humide » (saturé ou non). Avec « saturé », le débouché se perdait à chaque niveau sorti (le bloc qui venait de suinter n'est plus saturé) : 17 recherches pour 53 niveaux au lieu d'une.
 - **Sources : à quels blocs sert un débouché** : ceux de la même zone de 4×4 chunks, à 8 blocs au plus, pas plus bas que lui. On ne vérifie pas que le bloc fait partie du même amas (ce serait refaire la recherche) : deux amas voisins à moins de 8 blocs peuvent partager un débouché.
 - **Sources : seuil de l'amas** : le même que l'ancien suintement (bloc saturé qui reçoit encore, sauf s'il retient l'eau ou change d'état à ce stade).
+
+## Ce qui reste
+
+**À faire par Valentin** :
+- Tester en jeu, de préférence dans un nouveau monde : tranchée depuis un lac (la surface baisse d'un niveau à la fois, le lac reste au repos), terre humide minée (pas d'inondation), sol saturé qui ressort en source au pied d'une pente, `/ocwo water ledger`.
+- Jar : construit pour le commit `9fc4450` (étapes 1 à 5). Je n'ai pas pu le mettre dans le profil Modrinth (refusé par le système d'autorisation, la demande venant du coordinateur) : à confirmer, ou à copier soi-même.
+- Rien dans `main` avant son feu vert en jeu.
+
+**À décider** :
+- Évaporation sous terre : partout (comme maintenant) ou seulement pour l'eau qui voit le ciel (question ouverte du document 01).
+- Réserves des mondes existants : gardées (décision confirmée par Valentin le 19/11/2026).
+- Page de classement : mettre sa base à jour avec les nouvelles valeurs des matériaux.
+- Branche : le travail est poussé sur `claude/project-thread-631nn1` (seule branche que cette session pouvait pousser) ; la branche locale s'appelle `stabilisation`.
+
+**Limites connues** :
+- Réservoirs : pour un océan, la baisse reste locale aux 64×64 blocs de surface autour de la sortie.
+- Sources : un débouché peut servir à deux amas voisins à moins de 8 blocs.
+- End : seuls les portails activés après cette version sont connus (sinon, le point d'apparition).
+- Règle `ocwo:water_hot_fluid_evaporation` inutilisée ; glace et neige pas encore dans le registre.
+- Test `seagrassOnSandSurvives` : échecs rares déjà connus avant ce chantier (14, 15 et 16/11).
